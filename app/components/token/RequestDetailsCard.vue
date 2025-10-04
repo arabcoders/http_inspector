@@ -384,7 +384,7 @@ const loadBody = async (requestId: number) => {
 
     let text = data.text || ''
     const contentType = data.contentType || ''
-    let language = 'auto'
+    let language = 'text'
 
     if (contentType.includes('json')) {
       language = 'json'
