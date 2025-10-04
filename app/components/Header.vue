@@ -1,0 +1,293 @@
+<template>
+    <header
+        class="sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between gap-4">
+                <ULink to="/" class="flex items-center gap-3 text-lg font-semibold">
+                    <span
+                        class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-purple-500 text-white shadow-lg">
+                        <UIcon name="i-lucide-webhook" class="h-5 w-5" />
+                    </span>
+                    <span class="flex items-center gap-3">
+                        HTTP Inspector
+                        <code v-if="selectedToken"
+                            class="hidden sm:inline-block rounded bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-mono text-gray-900 dark:text-gray-100">
+                            /api/payload/{{ shortSlug(selectedToken) }}
+                        </code>
+                    </span>
+                </ULink>
+
+                <div class="flex items-center gap-3">
+                    <ClientOnly>
+                        <div v-if="sessionInfo && sessionRestoreEnabled" class="hidden md:flex items-center gap-2">
+                            <UButton color="neutral" variant="soft" size="sm" icon="i-lucide-user"
+                                @click="copySessionId">
+                                {{ sessionInfo.friendlyId }}
+                            </UButton>
+                        </div>
+                    </ClientOnly>
+
+                    <UButton v-if="sessionRestoreEnabled" color="neutral" variant="ghost" icon="i-lucide-upload"
+                        aria-label="Restore session" @click="showRestoreModal = true" />
+
+                    <NotificationToggle />
+
+                    <ClientOnly>
+                        <UButton :icon="colorMode.value === 'dark' ? 'i-lucide-moon' : 'i-lucide-sun'" color="neutral"
+                            variant="ghost" aria-label="Toggle theme" @click="toggleTheme" />
+                    </ClientOnly>
+
+                    <ClientOnly>
+                        <UButton v-if="authRequired" color="neutral" variant="ghost" icon="i-lucide-log-out"
+                            aria-label="Logout" @click="handleLogout" />
+                    </ClientOnly>
+
+                    <div v-if="isTokenPage" class="hidden md:flex items-center gap-3">
+                        <USelectMenu v-if="tokenOptions.length > 0" v-model="selectedToken" :items="tokenOptions"
+                            value-key="value" label-key="label" placeholder="Select token" class="min-w-[220px]"
+                            size="md" @update:model-value="handleTokenChange" />
+                        <UButton v-if="selectedToken" color="error" variant="solid" icon="i-lucide-trash-2"
+                            :loading="isDeleting" @click="showDeleteModal = true">
+                            Delete
+                        </UButton>
+                    </div>
+
+                    <UButton v-if="hasMobileExtras" class="md:hidden" color="neutral" variant="soft" size="sm"
+                        :icon="showMobileExtras ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                        :aria-expanded="showMobileExtras" aria-controls="header-mobile-extras"
+                        aria-label="Toggle header actions" @click="toggleMobileExtras" />
+                </div>
+            </div>
+
+            <Transition name="header-slide">
+                <div v-if="showMobileExtras && hasMobileExtras" id="header-mobile-extras"
+                    class="mt-3 grid gap-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-gray-900/90 p-3 shadow-sm md:hidden">
+                    <ClientOnly>
+                        <UButton v-if="sessionInfo && sessionRestoreEnabled" color="neutral" variant="soft" size="sm"
+                            icon="i-lucide-user" @click="copySessionId">
+                            {{ sessionInfo.friendlyId }}
+                        </UButton>
+                    </ClientOnly>
+
+                    <USelectMenu v-if="isTokenPage && tokenOptions.length > 0" v-model="selectedToken"
+                        :items="tokenOptions" value-key="value" label-key="label" placeholder="Select token" size="md"
+                        class="w-full" @update:model-value="handleTokenChange" />
+                    <UButton v-if="isTokenPage && selectedToken" color="error" variant="solid" icon="i-lucide-trash-2"
+                        :loading="isDeleting" @click="showDeleteModal = true">
+                        Delete Token
+                    </UButton>
+                </div>
+            </Transition>
+        </div>
+
+        <ConfirmModal v-model="showDeleteModal" title="Delete Token"
+            description="Are you sure you want to delete this token and all its requests? This action cannot be undone."
+            confirm-label="Delete" :loading="isDeleting" @confirm="confirmDelete" />
+
+        <RestoreSessionModal v-if="sessionRestoreEnabled" v-model="showRestoreModal" />
+    </header>
+</template>
+
+<script setup lang="ts">
+import { computed, watch, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { useTokens } from '~/composables/useTokens'
+import { useGlobalEventBus } from '~/composables/useGlobalEventBus'
+import type { ClientEventPayload } from '~/composables/useClientEvents'
+import { notify } from '~/composables/useNotificationBridge'
+import { copyText, shortSlug } from '~/utils'
+
+const route = useRoute()
+const colorMode = useColorMode()
+const runtimeConfig = useRuntimeConfig()
+
+const { tokens, loadTokens, deleteToken: removeToken } = useTokens()
+const eventBus = useGlobalEventBus()
+
+const sessionRestoreEnabled = runtimeConfig.public?.sessionRestoreEnabled !== false
+
+const selectedToken = ref<string>('')
+const isDeleting = ref(false)
+const showDeleteModal = ref(false)
+const showRestoreModal = ref(false)
+const sessionInfo = ref<{ friendlyId: string } | null>(null)
+const authRequired = ref(false)
+const showMobileExtras = ref(false)
+
+const checkAuthStatus = async () => {
+    try {
+        const response = await $fetch('/api/auth/status')
+        authRequired.value = response.required
+    } catch {
+        authRequired.value = false
+    }
+}
+
+watch(selectedToken, newVal => {
+    if (newVal) {
+        useHead({ title: shortSlug(newVal) })
+    }
+})
+
+const loadSessionInfo = async () => {
+    try {
+        const data = await $fetch('/api/session')
+        if (data?.friendlyId) {
+            sessionInfo.value = { friendlyId: data.friendlyId }
+        }
+    } catch (err) {
+        console.error('Failed to load session info:', err)
+    }
+}
+
+const copySessionId = async () => {
+    if (!sessionInfo.value?.friendlyId) {
+        return
+    }
+
+    try {
+        const success = await copyText(sessionInfo.value.friendlyId)
+
+        if (success) {
+            notify({
+                title: 'Session ID Copied',
+                description: `"${sessionInfo.value.friendlyId}" copied to clipboard`,
+                color: 'success',
+            })
+        }
+    } catch (err) {
+        console.error('Failed to copy:', err)
+    }
+}
+
+const isTokenPage = computed(() => route.path.startsWith('/token/'))
+
+const hasMobileExtras = computed(() => Boolean(sessionInfo.value) || isTokenPage.value)
+
+const tokenOptions = computed(() => {
+    // Sort tokens DESC by createdAt (newest first)
+    const sortedTokens = (tokens.value || []).slice()
+        .sort((a: { createdAt?: string }, b: { createdAt?: string }) => {
+            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+            return dateB - dateA
+        })
+
+    return sortedTokens.map((token: { id: string; _count?: { requests: number } }) => {
+        const requestCount = token._count?.requests ?? 0
+        const plural = requestCount === 1 ? 'request' : 'requests'
+        return { label: `${shortSlug(token.id)} · ${requestCount} ${plural}`, value: token.id }
+    })
+})
+
+watch(() => route.path, (path) => {
+    const match = path.match(/\/token\/(.+)/)
+    if (match && match[1]) {
+        selectedToken.value = match[1]
+    } else {
+        selectedToken.value = ''
+    }
+    showMobileExtras.value = false
+}, { immediate: true })
+
+watch([isTokenPage, hasMobileExtras], ([tokenPage, mobileExtras]) => {
+    if (!tokenPage && !mobileExtras) {
+        showMobileExtras.value = false
+    }
+})
+
+function handleClientEvent(payload: ClientEventPayload) {
+    if (!payload?.type) {
+        return
+    }
+
+    if (!['request.received', 'request.deleted', 'request.cleared'].includes(payload.type)) {
+        return
+    }
+
+    loadTokens()
+}
+
+onMounted(async () => {
+    await loadTokens()
+    await loadSessionInfo()
+    await checkAuthStatus()
+    eventBus.on('sse:event', handleClientEvent)
+})
+
+onUnmounted(() => eventBus.off('sse:event', handleClientEvent))
+
+const toggleTheme = () => {
+    colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
+}
+
+const toggleMobileExtras = () => {
+    showMobileExtras.value = !showMobileExtras.value
+}
+
+const handleLogout = async () => {
+    try {
+        await $fetch('/api/auth/logout', { method: 'POST' })
+        notify({
+            title: 'Logged out',
+            description: 'You have been logged out successfully.',
+            color: 'success',
+        })
+
+        useGlobalEventBus().emit('auth:changed')
+        await navigateTo('/login')
+    } catch (error) {
+        console.error('Logout failed:', error)
+        notify({
+            title: 'Logout failed',
+            description: 'Could not logout. Please try again.',
+            color: 'error',
+        })
+    }
+}
+
+const handleTokenChange = async (value: string | { value: string; label: string }) => {
+    const newTokenId = 'string' === typeof value ? value : value?.value
+    if (newTokenId) {
+        await navigateTo(`/token/${newTokenId}`)
+    }
+}
+
+const confirmDelete = async () => {
+    if (!selectedToken.value) {
+        return
+    }
+
+    showDeleteModal.value = false
+    isDeleting.value = true
+
+    try {
+        const currentTokens = tokens.value || []
+        const activeIndex = currentTokens.findIndex((t: { id: string }) => t.id === selectedToken.value)
+        const fallback = activeIndex !== -1 ? currentTokens[activeIndex + 1] ?? currentTokens[activeIndex - 1] : undefined
+
+        await removeToken(selectedToken.value)
+
+        if (fallback) {
+            await navigateTo(`/token/${fallback.id}`)
+        } else {
+            await navigateTo('/')
+        }
+
+        notify({
+            title: 'Token deleted',
+            description: 'The token and all its requests have been removed.',
+            color: 'success',
+        })
+    } catch (error) {
+        console.error('Failed to delete token:', error)
+        notify({
+            title: 'Delete failed',
+            description: 'Could not delete the token. Please try again.',
+            color: 'error',
+        })
+    } finally {
+        isDeleting.value = false
+    }
+}
+</script>

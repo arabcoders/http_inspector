@@ -1,0 +1,35 @@
+{
+    "editor.rulers": [
+        120
+    ],
+    "css.styleSheets": [
+        "app/assets/css/*.css"
+    ],
+    "search.exclude": {
+        ".nuxt": true,
+        ".output": true,
+        "node_modules": true,
+    },
+    "eslint.format.enable": true,
+    "eslint.ignoreUntitled": true,
+    "css.customData": [
+        ".vscode/tailwind.json"
+    ],
+    "cSpell.words": [
+        "autoresize",
+        "fastly",
+        "heroicons",
+        "hgetall",
+        "hset",
+        "iconify",
+        "lucide",
+        "sadd",
+        "scard",
+        "setex",
+        "shiki",
+        "smembers",
+        "sqlmap",
+        "srem",
+        "Whois"
+    ]
+}

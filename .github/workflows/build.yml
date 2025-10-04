@@ -1,0 +1,176 @@
+name: build-docker-containers
+
+on:
+    workflow_dispatch:
+        inputs:
+            build:
+                description: "Build and publish native multi-arch image"
+                type: boolean
+                default: true
+            update_readme:
+                description: "Also sync DockerHub README"
+                type: boolean
+                default: false
+    push:
+        branches:
+            - dev
+            - master
+        tags:
+            - "v*"
+        paths-ignore:
+            - "**.md"
+            - ".github/ISSUE_TEMPLATE/**"
+
+jobs:
+    test:
+      uses: ./.github/workflows/ci.yml
+
+    docker-build-arch:
+        name: Build Container (${{ matrix.arch }})
+        runs-on: ${{ matrix.os }}
+        needs: [test]
+        strategy:
+            matrix:
+                include:
+                    - os: ubuntu-latest
+                      arch: amd64
+                    - os: ubuntu-latest
+                      arch: arm64
+        permissions:
+            packages: write
+            contents: write
+        env:
+            REGISTRY: ${{ vars.REGISTRY != '' && vars.REGISTRY || 'ghcr.io' }}
+            SLUG: ${{ format('{0}/{1}', vars.REGISTRY != '' && vars.REGISTRY || 'ghcr.io', github.repository) }}
+            ARCH: ${{ matrix.arch }}
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Docker meta
+              id: meta
+              uses: docker/metadata-action@v5
+              with:
+                  images: ${{ env.SLUG }}
+                  flavor: |
+                      latest=false
+                      suffix=-${{ env.ARCH }}
+                  tags: |
+                      type=ref,event=branch
+                      type=ref,event=tag
+                      type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+            - name: Login to Container Registry
+              uses: docker/login-action@v3
+              with:
+                  registry: ${{ env.REGISTRY }}
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GIT_TOKEN && secrets.GIT_TOKEN || secrets.GITHUB_TOKEN }}
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
+            - name: Build Container and push
+              uses: docker/build-push-action@v5
+              with:
+                  context: .
+                  platforms: linux/${{ env.ARCH }}
+                  push: true
+                  tags: ${{ steps.meta.outputs.tags }}
+                  labels: ${{ steps.meta.outputs.labels }}
+                  cache-from: |
+                      type=gha,scope=${{ github.workflow }}
+                  cache-to: |
+                      type=gha,mode=max,scope=${{ github.workflow }}
+                  provenance: true
+
+    docker-publish-manifest:
+        name: Publish multi-arch manifest
+        needs: [docker-build-arch]
+        runs-on: ubuntu-latest
+        permissions:
+            packages: write
+            contents: write
+        env:
+            REGISTRY: ${{ vars.REGISTRY != '' && vars.REGISTRY || 'ghcr.io' }}
+            SLUG: ${{ format('{0}/{1}', vars.REGISTRY != '' && vars.REGISTRY || 'ghcr.io', github.repository) }}
+        steps:
+            - name: Docker meta
+              id: meta
+              uses: docker/metadata-action@v5
+              with:
+                  images: ${{ env.SLUG }}
+                  flavor: |
+                      latest=false
+                  tags: |
+                      type=ref,event=branch
+                      type=ref,event=tag
+                      type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+            - name: Login to Container Registry
+              uses: docker/login-action@v3
+              with:
+                  registry: ${{ env.REGISTRY }}
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GIT_TOKEN && secrets.GIT_TOKEN || secrets.GITHUB_TOKEN }}
+
+            - name: Create and push manifest list
+              shell: bash
+              run: |
+                  IFS=$'\n'
+                  for tag in $(echo "${{ steps.meta.outputs.tags }}"); do
+                    echo "Creating manifest for ${tag}"
+                    docker buildx imagetools create \
+                      --tag "$tag" \
+                      "${tag}-amd64" \
+                      "${tag}-arm64"
+                  done
+
+            - name: Overwrite GitHub release notes
+              if: startsWith(github.ref, 'refs/tags/v') && startsWith(env.REGISTRY, 'ghcr.io/')
+              uses: actions/github-script@v6
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  script: |
+                      const tag = context.ref.replace('refs/tags/', '');
+
+                      const latestRelease = await github.rest.repos.listReleases({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                      });
+
+                      const release = latestRelease.data.find(r => r.tag_name === tag);
+                      if (!release) {
+                        core.setFailed(`Release with tag ${tag} not found`);
+                        return;
+                      }
+
+                      const { data: comparison } = await github.rest.repos.compareCommits({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        base: latestRelease.data[1]?.tag_name || '',
+                        head: tag,
+                      });
+
+                      const commits = comparison.commits.filter(c => 1 === c.parents.length);
+
+                      const changelog = commits.map(
+                        c => `- ${c.sha.substring(0, 7)} ${c.commit.message.split('\n')[0]} by @${c.commit.author.name}`
+                      ).join('\n');
+
+                      if (!changelog) {
+                        core.setFailed('No commits found for the changelog');
+                        return;
+                      }
+
+                      console.log(`Changelog for ${tag}:\n${changelog}`);
+
+                      await github.rest.repos.updateRelease({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        release_id: release.id,
+                        body: changelog
+                      });

@@ -1,0 +1,29 @@
+services:
+  http_redis:
+    image: redis:latest
+    container_name: http_redis
+    command: redis-server
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  http_inspector:
+    image: ghcr.io/arabcoders/http_inspector:latest
+    build: .
+    container_name: http_inspector
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - REDIS_URL=redis://http_redis:6379
+    depends_on:
+      - http_redis
+
+volumes:
+  redis-data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./var/data
+      o: bind
+      
