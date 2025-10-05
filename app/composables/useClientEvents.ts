@@ -3,6 +3,8 @@
  * Provides real-time updates for requests across the application
  */
 
+import { useSSEStatus } from './useSSEStatus'
+
 export type ClientEventPayload = {
   type?: string
   token?: string
@@ -30,6 +32,9 @@ const ensureSource = () => {
     return
   }
 
+  const { setStatus } = useSSEStatus()
+  setStatus('connecting')
+
   source = new EventSource('/api/events')
 
   source.addEventListener('message', event => {
@@ -55,10 +60,15 @@ const ensureSource = () => {
     }
   })
 
-  source.addEventListener('open', () => reconnectAttempts = 0)
+  source.addEventListener('open', () => {
+    reconnectAttempts = 0
+    setStatus('connected')
+  })
 
   source.onerror = () => {
     console.warn('[SSE] Connection error, attempting to reconnect...')
+    setStatus('disconnected')
+    
     try {
       source?.close()
     } catch {
@@ -98,8 +108,34 @@ export const subscribeToClientEvents = (listener: Listener) => {
       }
       source = null
       reconnectAttempts = 0
+      
+      const { setStatus } = useSSEStatus()
+      setStatus('disconnected')
     }
   }
+}
+
+/**
+ * Force reconnect the SSE connection
+ */
+export const reconnectSSE = () => {
+  if ('undefined' === typeof window) {
+    return
+  }
+
+  console.log('[SSE] Manual reconnect triggered')
+  
+  if (source) {
+    try {
+      source.close()
+    } catch {
+      // ignore
+    }
+    source = null
+  }
+
+  reconnectAttempts = 0
+  ensureSource()
 }
 
 // Cleanup on page unload

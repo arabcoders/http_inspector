@@ -8,8 +8,9 @@
  * - User is authenticated
  */
 
-import { subscribeToClientEvents } from '~/composables/useClientEvents'
+import { subscribeToClientEvents, reconnectSSE } from '~/composables/useClientEvents'
 import type { ClientEventPayload } from '~/composables/useClientEvents'
+import { useSSEStatus } from '~/composables/useSSEStatus'
 
 export default defineNuxtPlugin(() => {
   if (!import.meta.client) {
@@ -17,7 +18,13 @@ export default defineNuxtPlugin(() => {
   }
 
   const eventBus = useGlobalEventBus()
+  const { registerReconnectCallback } = useSSEStatus()
   let unsubscribe: (() => void) | null = null
+
+  // Register reconnect callback
+  registerReconnectCallback(() => {
+    reconnectSSE()
+  })
 
   // Check auth status before connecting to SSE
   const checkAuthAndConnect = async () => {

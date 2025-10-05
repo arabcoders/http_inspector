@@ -10,6 +10,9 @@
                     </span>
                     <span class="flex items-center gap-3">
                         HTTP Inspector
+                        <ClientOnly>
+                            <SSEStatusIndicator />
+                        </ClientOnly>
                         <code v-if="selectedToken"
                             class="hidden sm:inline-block rounded bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-mono text-gray-900 dark:text-gray-100">
                             /api/payload/{{ shortSlug(selectedToken) }}
