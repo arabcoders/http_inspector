@@ -5,8 +5,8 @@
             <div class="flex items-center justify-between gap-4">
                 <ULink to="/" class="flex items-center gap-3 text-lg font-semibold">
                     <span
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-purple-500 text-white shadow-lg">
-                        <UIcon name="i-lucide-webhook" class="h-5 w-5" />
+                        class="inline-flex h-10 w-10 items-center justify-center rounded-full">
+                        <img src="/favicon.svg" class="h-6 w-6" alt="Logo">
                     </span>
                     <span class="flex items-center gap-3">
                         HTTP Inspector
