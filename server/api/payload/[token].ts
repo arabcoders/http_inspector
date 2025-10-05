@@ -1,8 +1,6 @@
-import type { EventHandlerRequest, H3Event } from 'h3';
-import { readRawBody, defineEventHandler } from 'h3'
-import type { Token } from '~~/server/lib/redis-db'
-import { getToken, insertRequest, getSessionIdForToken } from '~~/server/lib/redis-db'
-import { publish, publishGlobal } from '~~/server/lib/events'
+import { readRawBody, defineEventHandler, type H3Event, type EventHandlerRequest } from 'h3'
+import { getToken, insertRequest, getSessionIdForToken, type Token } from '~~/server/lib/redis-db'
+import { useServerEvents } from '~~/server/lib/events'
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -170,8 +168,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     remoteIp || event.node.req.socket.remoteAddress || '127.0.0.1'
   )
 
-  publish(token, { type: 'request.received', request: created })
-  publishGlobal(sessionId, { type: 'request.received', token, request: created })
+  useServerEvents().publish(sessionId, 'request.received', { token, request: created })
 
   const resp = await buildResponse(tokenRow)
 

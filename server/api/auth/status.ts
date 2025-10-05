@@ -1,7 +1,7 @@
-import { defineEventHandler, getCookie } from 'h3'
+import { defineEventHandler, getCookie, type H3Event, type EventHandlerRequest } from 'h3'
 import { verifyAuthToken } from '../../lib/jwt'
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   const AUTH_USERNAME = process.env.AUTH_USERNAME?.trim()
   const AUTH_PASSWORD = process.env.AUTH_PASSWORD?.trim()
 

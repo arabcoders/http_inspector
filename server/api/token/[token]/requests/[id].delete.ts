@@ -1,15 +1,20 @@
 import { defineEventHandler, createError, type H3Event, type EventHandlerRequest } from 'h3'
-import { getRequestFull, getToken } from '~~/server/lib/redis-db'
+import { deleteRequest, getToken } from '~~/server/lib/redis-db'
 import { getOrCreateSession } from '~~/server/lib/session'
+import { useServerEvents } from '~~/server/lib/events'
 
 export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   const sessionId = await getOrCreateSession(event)
-
+  const method = event.node.req.method?.toUpperCase() || 'GET'
   type EventParams = { params?: Record<string, string> }
   const ctx = (event.context as unknown as EventParams) || {}
   const params = ctx.params || {}
   const id = Number(params.id)
   const tokenId = params.token
+
+  if ('DELETE' !== method) {
+    throw createError({ statusCode: 405, message: 'Method not allowed' })
+  }
 
   if (!tokenId) {
     throw createError({ statusCode: 400, message: 'Token ID is required' })
@@ -24,24 +29,12 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     throw createError({ statusCode: 404, message: 'Token not found' })
   }
 
-  const row = await getRequestFull(sessionId, tokenId, id)
-  if (!row || !row.body) {
-    throw createError({ statusCode: 404, message: 'Request body not found' })
+  try {
+    await deleteRequest(sessionId, tokenId, id)
+    useServerEvents().publish(sessionId, 'request.deleted', { token: tokenId, requestId: String(id) })
+    return { ok: true }
+  } catch (err) {
+    console.error('deleteRequest failed', err)
+    throw createError({ statusCode: 500, message: 'Failed to delete request' })
   }
-
-  let ext = 'bin'
-
-  if (row.contentType) {
-    event.node.res.setHeader('Content-Type', row.contentType)
-    const parts = row.contentType.split('/')
-    if (parts.length === 2) {
-      ext = parts[1].split(';')[0] || 'bin' // Handle cases like "application/json; charset=utf-8"
-      if (ext.length > 5) {
-        ext = 'bin' // Prevent overly long extensions
-      }
-    }
-  }
-
-  event.node.res.setHeader('Content-Disposition', `inline; filename="r-${token.id}-${id}-body.${ext}"`)
-  return Buffer.from(row.body)
 })

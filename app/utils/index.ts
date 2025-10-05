@@ -1,5 +1,4 @@
 export const copyText = async (text: string): Promise<boolean> => {
-  // Try modern async clipboard API when available
   if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
     try {
       await navigator.clipboard.writeText(text)
@@ -9,11 +8,9 @@ export const copyText = async (text: string): Promise<boolean> => {
     }
   }
 
-  // Fallback for older browsers (execCommand) — only in DOM environments
   if (typeof document !== 'undefined') {
     const textarea = document.createElement('textarea')
     textarea.value = text
-    // Make sure it's readonly and out of viewport
     textarea.setAttribute('readonly', '')
     textarea.style.position = 'absolute'
     textarea.style.left = '-9999px'
@@ -28,10 +25,9 @@ export const copyText = async (text: string): Promise<boolean> => {
       return false
     }
   }
-
-  // Not a DOM environment (server) — nothing we can do
   return false
 }
+
 export const shortSlug = (id: string) => {
   if (!id) {
     return ''

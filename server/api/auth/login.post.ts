@@ -1,8 +1,8 @@
-import { defineEventHandler, readBody, createError, setCookie } from 'h3'
-import { generateAuthToken, getTokenMaxAge } from '../../lib/jwt'
 import { timingSafeEqual } from 'crypto'
+import { defineEventHandler, readBody, createError, setCookie, type H3Event, type EventHandlerRequest } from 'h3'
+import { generateAuthToken, getTokenMaxAge } from '~~/server/lib/jwt'
 
-function cmp(a: string, b: string): boolean {
+const cmp = (a: string, b: string): boolean => {
   const bufA = Buffer.from(a, 'utf8')
   const bufB = Buffer.from(b, 'utf8')
 
@@ -15,7 +15,7 @@ function cmp(a: string, b: string): boolean {
   return timingSafeEqual(bufA, bufB)
 }
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   const AUTH_USERNAME = process.env.AUTH_USERNAME?.trim()
   const AUTH_PASSWORD = process.env.AUTH_PASSWORD?.trim()
   const AUTH_REQUIRED = Boolean(AUTH_USERNAME && AUTH_PASSWORD)

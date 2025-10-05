@@ -1,19 +1,10 @@
-import { defineEventHandler, createError } from 'h3'
+import { defineEventHandler, createError, type H3Event, type EventHandlerRequest } from 'h3'
 import { getRequestFull, getToken } from '~~/server/lib/redis-db'
 import { getOrCreateSession } from '~~/server/lib/session'
 import { detectBinaryBody, extractContentType } from '~~/shared/content'
+import { parseHeaders } from '~~/server/lib/utils'
 
-function parseHeaders(raw: string | null): Record<string, unknown> {
-  if (!raw) return {}
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    return parsed
-  } catch {
-    return {}
-  }
-}
-
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   const sessionId = await getOrCreateSession(event)
   type EventParams = { params?: Record<string, string> }
   const ctx = (event.context as unknown as EventParams) || {}
@@ -22,34 +13,21 @@ export default defineEventHandler(async (event) => {
   const tokenId = params.token
 
   if (!tokenId) {
-    throw createError({
-      statusCode: 400,
-      message: 'Token ID is required'
-    })
+    throw createError({ statusCode: 400, message: 'Token ID is required' })
   }
 
   if (Number.isNaN(id)) {
-    throw createError({
-      statusCode: 400,
-      message: 'Invalid request ID'
-    })
+    throw createError({ statusCode: 400, message: 'Invalid request ID' })
   }
 
-  // Check if token exists
   const token = await getToken(sessionId, tokenId)
   if (!token) {
-    throw createError({
-      statusCode: 404,
-      message: 'Token not found'
-    })
+    throw createError({ statusCode: 404, message: 'Token not found' })
   }
 
   const row = await getRequestFull(sessionId, tokenId, id)
   if (!row) {
-    throw createError({
-      statusCode: 404,
-      message: 'Request not found'
-    })
+    throw createError({ statusCode: 404, message: 'Request not found' })
   }
 
   const headers = parseHeaders(row.headers ?? null)
@@ -57,7 +35,7 @@ export default defineEventHandler(async (event) => {
   const bodyBuffer = row.body ? Buffer.from(row.body) : null
   const isBinary = row.isBinary ?? detectBinaryBody(bodyBuffer ?? undefined, headerContentType)
 
-  if (!bodyBuffer || bodyBuffer.length === 0) {
+  if (!bodyBuffer || 0 === bodyBuffer.length) {
     return { contentType: headerContentType, text: '', headers, isBinary: false }
   }
 

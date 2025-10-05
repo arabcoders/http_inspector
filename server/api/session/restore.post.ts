@@ -1,25 +1,17 @@
-import { defineEventHandler, readBody } from 'h3'
+import { defineEventHandler, readBody, type H3Event, type EventHandlerRequest } from 'h3'
 import { setSession } from '~~/server/lib/session'
 import { isValidFriendlyId } from '~~/server/lib/friendly-id'
 
-export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig()
-
-  if (!config.sessionRestoreEnabled) {
-    throw createError({
-      statusCode: 403,
-      message: 'Session restoration is disabled',
-    })
+export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
+  if (true !== useRuntimeConfig().sessionRestoreEnabled) {
+    throw createError({ statusCode: 403, message: 'Session restoration is disabled' })
   }
 
   const body = await readBody(event)
   const { sessionId } = body
 
-  if (!sessionId || typeof sessionId !== 'string') {
-    throw createError({
-      statusCode: 400,
-      message: 'sessionId is required',
-    })
+  if (!sessionId || 'string' !== typeof sessionId) {
+    throw createError({ statusCode: 400, message: 'sessionId is required' })
   }
 
   // Validate session ID format (alphanumeric 16-32 chars OR friendly format word-word-word)
@@ -36,10 +28,7 @@ export default defineEventHandler(async (event) => {
   const success = await setSession(event, sessionId)
 
   if (!success) {
-    throw createError({
-      statusCode: 404,
-      message: 'Session not found or expired',
-    })
+    throw createError({ statusCode: 404, message: 'Session not found or expired' })
   }
 
   return { success: true, sessionId }

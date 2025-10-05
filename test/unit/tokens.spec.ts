@@ -14,7 +14,15 @@ vi.mock('~~/server/lib/session', () => ({
 }))
 
 vi.mock('~~/server/lib/events', () => ({
-  publishGlobal: vi.fn(),
+  useServerEvents: vi.fn(() => ({
+    publish: vi.fn(),
+    subscribeToSession: vi.fn(() => vi.fn()),
+    subscribeToToken: vi.fn(() => vi.fn()),
+    getSubscriberCount: vi.fn(() => 0),
+    getActiveChannels: vi.fn(() => []),
+    getTotalSubscribers: vi.fn(() => 0),
+    __clearAll: vi.fn(),
+  })),
 }))
 
 describe('tokens api', () => {

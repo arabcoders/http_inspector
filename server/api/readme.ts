@@ -1,8 +1,8 @@
-import { defineEventHandler } from 'h3'
-import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { defineEventHandler, type H3Event, type EventHandlerRequest } from 'h3'
 
-export default defineEventHandler(async event => {
+export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   try {
     event.node.res.setHeader('Content-Type', 'text/plain; charset=utf-8')
     return await readFile(join(process.cwd(), 'README.md'), 'utf-8')
