@@ -43,7 +43,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed, ref } from 'vue'
 import { marked } from 'marked'
-import type { ClientEventPayload } from '~/composables/useClientEvents'
+import { useSSE, type SSEEventPayload } from '~/composables/useSSE'
 import { useTokens } from '~/composables/useTokens'
 import { copyText } from '~/utils'
 import { notify } from '~/composables/useNotificationBridge'
@@ -106,8 +106,8 @@ const deleteToken = (id: string) => {
   showDeleteTokenModal.value = true
 }
 
-const handleClientEvent = (payload: ClientEventPayload) => {
-  const tokenId = payload.token
+const handleClientEvent = (payload: SSEEventPayload) => {
+  const tokenId = payload.token as string
 
   switch (payload.type) {
     case 'token.created': {
@@ -196,7 +196,7 @@ onMounted(async () => {
     }
   })
 
-  unsubscribe = useGlobalEventBus().on('sse:event', handleClientEvent)
+  unsubscribe = useSSE().onAny(handleClientEvent)
 })
 
 onUnmounted(() => {

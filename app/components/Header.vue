@@ -4,8 +4,7 @@
         <div class="container mx-auto px-4 py-4">
             <div class="flex items-center justify-between gap-4">
                 <ULink to="/" class="flex items-center gap-3 text-lg font-semibold">
-                    <span
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-full">
+                    <span class="inline-flex h-10 w-10 items-center justify-center rounded-full">
                         <img src="/favicon.svg" class="h-6 w-6" alt="Logo">
                     </span>
                     <span class="flex items-center gap-3">
@@ -95,8 +94,7 @@
 import { computed, watch, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTokens } from '~/composables/useTokens'
-import { useGlobalEventBus } from '~/composables/useGlobalEventBus'
-import type { ClientEventPayload } from '~/composables/useClientEvents'
+import { useSSE, type SSEEventPayload } from '~/composables/useSSE'
 import { notify } from '~/composables/useNotificationBridge'
 import { copyText, shortSlug } from '~/utils'
 
@@ -105,7 +103,7 @@ const colorMode = useColorMode()
 const runtimeConfig = useRuntimeConfig()
 
 const { tokens, loadTokens, deleteToken: removeToken } = useTokens()
-const eventBus = useGlobalEventBus()
+const sse = useSSE()
 
 const sessionRestoreEnabled = runtimeConfig.public?.sessionRestoreEnabled !== false
 
@@ -199,7 +197,7 @@ watch([isTokenPage, hasMobileExtras], ([tokenPage, mobileExtras]) => {
     }
 })
 
-function handleClientEvent(payload: ClientEventPayload) {
+function handleClientEvent(payload: SSEEventPayload) {
     if (!payload?.type) {
         return
     }
@@ -211,14 +209,21 @@ function handleClientEvent(payload: ClientEventPayload) {
     loadTokens()
 }
 
+let unsubscribe: (() => void) | null = null
+
 onMounted(async () => {
     await loadTokens()
     await loadSessionInfo()
     await checkAuthStatus()
-    eventBus.on('sse:event', handleClientEvent)
+    unsubscribe = sse.onAny(handleClientEvent)
 })
 
-onUnmounted(() => eventBus.off('sse:event', handleClientEvent))
+onUnmounted(() => {
+    if (unsubscribe) {
+        unsubscribe()
+        unsubscribe = null
+    }
+})
 
 const toggleTheme = () => {
     colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
@@ -237,7 +242,7 @@ const handleLogout = async () => {
             color: 'success',
         })
 
-        useGlobalEventBus().emit('auth:changed')
+        sse.emit({ type: 'auth:changed' })
         await navigateTo('/login')
     } catch (error) {
         console.error('Logout failed:', error)

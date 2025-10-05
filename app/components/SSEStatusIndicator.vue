@@ -8,9 +8,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useSSEStatus } from '~/composables/useSSEStatus'
+import { useSSE } from '~/composables/useSSE'
 
-const { status, triggerReconnect } = useSSEStatus()
+const { status, reconnect } = useSSE(false)
 
 const statusIcon = computed(() => {
     switch (status.value) {
@@ -66,7 +66,7 @@ const ariaLabel = computed(() => {
 
 const handleReconnect = () => {
     if ('disconnected' === status.value) {
-        triggerReconnect()
+        reconnect()
     }
 }
 </script>

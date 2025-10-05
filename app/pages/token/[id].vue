@@ -43,7 +43,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
-import type { ClientEventPayload } from '~/composables/useClientEvents'
+import { useSSE, type SSEEventPayload } from '~/composables/useSSE'
 import { notify } from '~/composables/useNotificationBridge'
 import RequestSidebar from '~/components/RequestSidebar.vue'
 import ResponseSettingsCard from '~/components/token/ResponseSettingsCard.vue'
@@ -190,7 +190,7 @@ const handleClearRequests = async () => {
 const openSidebar = () => isSidebarOpen.value = true
 const closeSidebar = () => isSidebarOpen.value = false
 
-const handleClientEvent = (payload: ClientEventPayload) => {
+const handleClientEvent = (payload: SSEEventPayload) => {
   if (payload.token !== tokenId.value) {
     return
   }
@@ -281,7 +281,7 @@ let unsubscribe: (() => void) | null = null
 onMounted(async () => {
   isSidebarOpen.value = false
   await loadRequests()
-  unsubscribe = useGlobalEventBus().on('sse:event', handleClientEvent)
+  unsubscribe = useSSE().onAny(handleClientEvent)
 })
 
 onUnmounted(() => {
