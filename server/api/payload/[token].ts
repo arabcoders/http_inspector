@@ -1,71 +1,12 @@
 import { readRawBody, defineEventHandler, type H3Event, type EventHandlerRequest } from 'h3'
-import { getToken, insertRequest, getSessionIdForToken, type Token } from '~~/server/lib/redis-db'
-import { useServerEvents } from '~~/server/lib/events'
+import { getToken, getSessionIdForToken, type Token } from '~~/server/lib/redis-db'
+import { ingestRequest } from '~~/server/lib/request-ingestion'
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD',
   'Access-Control-Allow-Headers': '*',
   'Access-Control-Expose-Headers': '*',
-}
-
-const selectFirstIp = (input?: string | null) => {
-  if (!input) {
-    return null
-  }
-
-  for (const part of input.split(',')) {
-    const candidate = part.trim()
-    if (candidate) {
-      return candidate
-    }
-  }
-  return null
-}
-
-const extractFromForwarded = (forwarded?: string | null) => {
-  if (!forwarded) {
-    return null
-  }
-  for (const segment of forwarded.split(',')) {
-    const trimmed = segment.trim()
-    const match = /for=([^;]+)/i.exec(trimmed)
-    if (match?.[1]) {
-      const cleaned = match[1].replace(/["[\]]/g, '').trim()
-      if (cleaned) {
-        return cleaned
-      }
-    }
-  }
-  return null
-}
-
-function determineClientIp(headers: Record<string, string>) {
-  const forwardedFor = selectFirstIp(headers['x-forwarded-for'])
-  if (forwardedFor) {
-    return forwardedFor
-  }
-
-  const realIp = headers['x-real-ip'] || headers['x-client-ip'] || headers['true-client-ip']
-  if (realIp) {
-    return realIp
-  }
-
-  const cfIp = headers['cf-connecting-ip'] || headers['fastly-client-ip']
-  if (cfIp) {
-    return cfIp
-  }
-
-  const forwarded = extractFromForwarded(headers['forwarded'])
-  if (forwarded) {
-    return forwarded
-  }
-
-  const vercelIp = headers['x-vercel-forwarded-for']
-  if (vercelIp) {
-    return selectFirstIp(vercelIp)
-  }
-  return null
 }
 
 const buildResponse = async (tokenRow: Token | null, allowBody = true) => {
@@ -155,20 +96,16 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     console.warn('failed to read body', err)
   }
 
-  const remoteIp = process.env.TRUST_PROXY_CLIENT_IP === 'true' ? determineClientIp(headersObj) : event.node.req.socket.remoteAddress
-
-  const created = await insertRequest(
+  // Ingest the request and publish events
+  await ingestRequest(
     sessionId,
     token,
     method,
     headersObj,
     buf,
     event.node.req.url || '/api/payload/' + token,
-    event.node.req.socket.remoteAddress || '127.0.0.1',
-    remoteIp || event.node.req.socket.remoteAddress || '127.0.0.1'
+    event.node.req.socket.remoteAddress || '127.0.0.1'
   )
-
-  useServerEvents().publish(sessionId, 'request.received', { token, request: created })
 
   const resp = await buildResponse(tokenRow)
 

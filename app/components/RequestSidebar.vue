@@ -16,12 +16,10 @@
           icon="i-lucide-x" aria-label="Close requests sidebar" @click="$emit('close')" />
 
         <UButton type="button" color="neutral" variant="ghost" icon="i-lucide-copy" size="sm"
-          @click="$emit('copy-url')" />
+          @click="$emit('copy-url')">Copy URL</UButton>
 
         <UButton type="button" color="error" variant="ghost" icon="i-lucide-trash-2" size="sm"
-          aria-label="Clear all requests" :disabled="!requests.length" @click="$emit('clear')">
-          Clear All
-        </UButton>
+          aria-label="Clear all requests" :disabled="!requests.length" @click="$emit('clear')" />
       </div>
     </div>
 

@@ -249,6 +249,53 @@ Delete a single stored request. **Response:** `{ "ok": true }`
 #### DELETE /api/token/{tokenId}/requests
 Delete all stored requests for a token. **Response:** `{ "ok": true }`
 
+#### POST /api/token/{tokenId}
+Manually ingest a raw HTTP request into the system.
+
+**Request Body:**
+```json
+{
+  "raw": "POST /api/webhook HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\n\r\n{\"event\":\"test\"}",
+  "clientIp": "192.168.1.100",
+  "remoteIp": "203.0.113.1"
+}
+```
+
+- `raw` (required): The raw HTTP request in standard HTTP/1.1 format. Supports both path-only URLs (`/api/test`) and full URLs (`http://example.com/api/test`)
+- `clientIp` (optional): Override the client IP address
+- `remoteIp` (optional): Override the remote IP address
+
+**Response:**
+```json
+{
+  "ok": true,
+  "request": {
+    "id": 42,
+    "method": "POST",
+    "url": "/api/webhook",
+    "createdAt": "2025-01-15T10:30:00.000Z"
+  }
+}
+```
+
+**Example:**
+```bash
+# Ingest a previously exported raw request with path-only URL
+curl -X POST http://localhost:3000/api/token/your-token-id \
+  -H "Content-Type: application/json" \
+  -d '{
+    "raw": "POST /api/data HTTP/1.1\r\nHost: api.example.com\r\nContent-Type: application/json\r\n\r\n{\"name\":\"test\"}",
+    "clientIp": "10.0.0.5"
+  }'
+
+# Ingest a request with full URL
+curl -X POST http://localhost:3000/api/token/your-token-id \
+  -H "Content-Type: application/json" \
+  -d '{
+    "raw": "GET https://api.example.com/webhook?token=abc123 HTTP/1.1\r\nHost: api.example.com\r\nAuthorization: Bearer token\r\n\r\n"
+  }'
+```
+
 ### HTTP Capture Endpoint
 
 #### ANY /api/payload/{tokenId}
