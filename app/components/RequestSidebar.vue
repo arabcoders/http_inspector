@@ -43,16 +43,16 @@
             @click="$emit('select', request.id)">
             <div class="flex w-full flex-col gap-2">
               <div class="flex items-center gap-2">
-                <UBadge v-if="incomingIds && incomingIds.has(request.id)" color="success" variant="solid" size="xs"
-                  class="font-semibold uppercase">
-                  New
-                </UBadge>
-
                 <UBadge v-bind="getMethodBadgeProps(request.method)" class="uppercase tracking-wide" size="xs">
                   {{ request.method }}
                 </UBadge>
 
                 <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ request.id }}</span>
+
+                <UBadge v-if="incomingIds && incomingIds.has(request.id)" color="success" variant="solid" size="xs"
+                  class="font-semibold uppercase">
+                  New
+                </UBadge>
 
                 <UBadge v-if="request.isBinary" color="primary" variant="outline" size="xs"
                   class="ml-auto inline-flex items-center gap-1">

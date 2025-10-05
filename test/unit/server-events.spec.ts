@@ -175,7 +175,7 @@ describe('useServerEvents', () => {
 
       const payload: ServerEventPayload<'request.deleted'> = {
         token: 'token-1',
-        requestId: 'req-123',
+        requestId: 123,
       }
 
       const result = events.publish('session-1', 'request.deleted', payload)
@@ -187,7 +187,7 @@ describe('useServerEvents', () => {
     it('should handle publishing with no subscribers', () => {
       const payload: ServerEventPayload<'request.deleted'> = {
         token: 'token-1',
-        requestId: 'req-123',
+        requestId: 123,
       }
 
       const result = events.publish('session-1', 'request.deleted', payload)
@@ -368,7 +368,7 @@ describe('useServerEvents', () => {
 
       const payload: ServerEventPayload<'request.deleted'> = {
         token: 'token-1',
-        requestId: 'req-123',
+        requestId: 123,
       }
 
       events.publish('session-1', 'request.deleted', payload)
@@ -378,7 +378,7 @@ describe('useServerEvents', () => {
 
       expect(data.type).toBe('request.deleted')
       expect(data.token).toBe('token-1')
-      expect(data.requestId).toBe('req-123')
+      expect(data.requestId).toBe(123)
     })
 
     it('should serialize complex payloads correctly', () => {

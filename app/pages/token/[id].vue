@@ -246,7 +246,8 @@ const handleClientEvent = (payload: SSEEventPayload) => {
       if (typeof payload.requestId !== 'number') {
         break
       }
-
+      console.log('Deleting request with ID:', payload.requestId, requests.value.map(r => r.id))
+      
       requests.value = requests.value.filter(r => r.id !== payload.requestId)
 
       if (selectedRequestIdRef.value === payload.requestId) {

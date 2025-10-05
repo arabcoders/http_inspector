@@ -31,7 +31,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
 
   try {
     await deleteRequest(sessionId, tokenId, id)
-    useServerEvents().publish(sessionId, 'request.deleted', { token: tokenId, requestId: String(id) })
+    useServerEvents().publish(sessionId, 'request.deleted', { token: tokenId, requestId: id })
     return { ok: true }
   } catch (err) {
     console.error('deleteRequest failed', err)

@@ -16,7 +16,7 @@ import type { Request, Token } from './redis-db'
  */
 export interface ServerEventMap {
   'request.received': { token: string; request: Request }
-  'request.deleted': { token: string; requestId: string }
+  'request.deleted': { token: string; requestId: number }
   'request.cleared': { token: string }
   'token.created': { token: Pick<Token, 'id' | 'createdAt'> }
   'token.deleted': { token: { id: string } }
