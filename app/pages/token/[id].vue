@@ -33,7 +33,7 @@
           </div>
           <div class="grid gap-6 px-6 pb-6 lg:p-6">
             <ResponseSettingsCard :token-id="tokenId" />
-            <RawRequestCard v-if="!selectedRequest?.isBinary" :request="selectedRequest" :token-id="tokenId" />
+            <RawRequestCard :request="selectedRequest" :token-id="tokenId" />
             <RequestDetailsCard :request="selectedRequest" :token-id="tokenId" />
           </div>
         </main>

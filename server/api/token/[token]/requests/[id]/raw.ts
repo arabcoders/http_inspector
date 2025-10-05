@@ -1,8 +1,9 @@
-import { defineEventHandler, createError, type H3Event, type EventHandlerRequest } from 'h3'
+import { defineEventHandler, createError, type H3Event, type EventHandlerRequest, setResponseHeader, getQuery } from 'h3'
 import { getRequestFull, getToken } from '~~/server/lib/redis-db'
 import { getOrCreateSession } from '~~/server/lib/session'
 import { detectBinaryBody, extractContentType } from '~~/shared/content'
 import { parseHeaders, capitalizeHeader } from '~~/server/lib/utils'
+import { Readable } from 'stream'
 
 export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   const sessionId = await getOrCreateSession(event)
@@ -11,6 +12,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const params = ctx.params || {}
   const id = Number(params.id)
   const tokenId = params.token
+  const query = getQuery(event)
 
   if (!tokenId) {
     throw createError({ statusCode: 400, message: 'Token ID is required' })
@@ -35,15 +37,9 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const bodyBuffer = row.body ? Buffer.from(row.body as Uint8Array) : null
   const isBinary = row.isBinary ?? detectBinaryBody(bodyBuffer ?? undefined, contentType)
 
-  if (isBinary) {
-    throw createError({ statusCode: 400, message: 'Cannot display binary content as text' })
-  }
-
   const url = row.url || '/'
   const method = row.method || 'GET'
 
-  // Determine the full URL - if url already contains protocol (http:// or https://), use it as-is
-  // Otherwise, construct it from headers
   let fullUrl = url
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     const host = headers.host || headers.Host || 'localhost'
@@ -55,8 +51,38 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const headerLines = Object.entries(headers).map(
     ([key, value]) => `${capitalizeHeader(key)}: ${String(value)}`
   ).join('\r\n')
-  const body = bodyBuffer ? bodyBuffer.toString('utf8') : ''
 
-  event.node.res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-  return `${statusLine}\r\n${headerLines}${headerLines ? '\r\n' : ''}\r\n${body}`
+  setResponseHeader(event, 'Content-Type', 'text/plain; charset=utf-8')
+
+  const filename = `r-${tokenId}-${id}-raw.http`
+  const disposition = (isBinary || 'true' === query.download || '1' === query.download) ? 'attachment' : 'inline'
+  setResponseHeader(event, 'Content-Disposition', `${disposition}; filename="${filename}"`)
+
+  const httpHeader = `${statusLine}\r\n${headerLines}${headerLines ? '\r\n' : ''}\r\n`
+
+  return new Promise<void>((resolve, reject) => {
+    const res = event.node.res
+
+    res.write(httpHeader, 'utf8', err => {
+      if (err) {
+        reject(err)
+        return
+      }
+
+      if (!bodyBuffer || bodyBuffer.length === 0) {
+        res.end()
+        resolve()
+        return
+      }
+
+      const stream = Readable.from(bodyBuffer)
+
+      stream.on('error', streamErr => reject(streamErr))
+      stream.on('end', () => {
+        res.end()
+        resolve()
+      })
+      stream.pipe(res, { end: false })
+    })
+  })
 })

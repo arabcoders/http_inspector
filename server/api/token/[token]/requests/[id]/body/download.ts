@@ -1,6 +1,9 @@
-import { defineEventHandler, createError, type H3Event, type EventHandlerRequest } from 'h3'
+import { defineEventHandler, createError, type H3Event, type EventHandlerRequest, setResponseHeader, getQuery } from 'h3'
+import { detectBinaryBody, extractContentType } from '~~/shared/content'
 import { getRequestFull, getToken } from '~~/server/lib/redis-db'
 import { getOrCreateSession } from '~~/server/lib/session'
+import { parseHeaders } from '~~/server/lib/utils'
+import { Readable } from 'stream'
 
 export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   const sessionId = await getOrCreateSession(event)
@@ -10,6 +13,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const params = ctx.params || {}
   const id = Number(params.id)
   const tokenId = params.token
+  const query = getQuery(event)
 
   if (!tokenId) {
     throw createError({ statusCode: 400, message: 'Token ID is required' })
@@ -30,18 +34,35 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   }
 
   let ext = 'bin'
+  const headers = parseHeaders(row.headers as string)
+  const contentType = row.contentType ?? extractContentType(headers)
 
-  if (row.contentType) {
-    event.node.res.setHeader('Content-Type', row.contentType)
-    const parts = row.contentType.split('/')
+  if (contentType) {
+    setResponseHeader(event, 'Content-Type', contentType)
+    const parts = contentType.split('/')
     if (parts.length === 2) {
-      ext = parts[1].split(';')[0] || 'bin' // Handle cases like "application/json; charset=utf-8"
+      ext = parts[1].split(';')[0] || 'bin'
       if (ext.length > 5) {
-        ext = 'bin' // Prevent overly long extensions
+        ext = 'bin'
       }
     }
   }
 
-  event.node.res.setHeader('Content-Disposition', `inline; filename="r-${token.id}-${id}-body.${ext}"`)
-  return Buffer.from(row.body)
+  const filename = `r-${tokenId}-${id}-body.${ext}`
+  const isBinary = row.isBinary ?? detectBinaryBody(row.body ?? undefined, contentType)
+  const disposition = (isBinary || 'true' === query.download || '1' === query.download) ? 'attachment' : 'inline'
+  setResponseHeader(event, 'Content-Disposition', `${disposition}; filename="${filename}"`)
+
+  const bodyBuffer = Buffer.from(row.body)
+
+  return new Promise<void>((resolve, reject) => {
+    const res = event.node.res
+    const stream = Readable.from(bodyBuffer)
+    stream.on('error', (streamErr) => reject(streamErr))
+    stream.on('end', () => {
+      res.end()
+      resolve()
+    })
+    stream.pipe(res, { end: false })
+  })
 })

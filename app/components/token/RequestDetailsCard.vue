@@ -166,9 +166,13 @@
               </div>
               <div class="flex items-center gap-1">
                 <div class="flex justify-end">
-                  <UTooltip v-if="isBinary || bodyState" text="Download body">
-                    <UButton type="button" variant="ghost" color="neutral" size="xs" icon="i-lucide-download"
-                      @click.stop="navigateTo(`/api/token/${tokenId}/requests/${request.id}/body/download`, { external: true })" />
+                  <UTooltip text="Download body">
+                    <ULink role="button" variant="ghost" color="neutral" size="xs" target="_blank"
+                      :href="`/api/token/${tokenId}/requests/${request.id}/body/download`"
+                      :disabled="!request || (!isBinary && !bodyState)"
+                      >
+                      <UIcon name="i-lucide-download" size="xs" class="h-4 w-4" />
+                    </ULink>
                   </UTooltip>
                 </div>
                 <UIcon :name="isBodyOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
@@ -187,7 +191,7 @@
               <div v-else-if="isBinary || bodyState?.isBinary"
                 class="flex h-40 flex-col items-center justify-center gap-2 p-4 text-sm text-gray-500 dark:text-gray-400">
                 <UIcon name="i-lucide-download" class="h-6 w-6" />
-                <span>Binary body preview is not supported.</span>
+                <span>Preview disabled for binary content.</span>
               </div>
               <div v-else-if="!bodyState"
                 class="flex h-40 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -422,7 +426,7 @@ const loadBody = async (requestId: number) => {
       }
     }
 
-    bodyState.value = { content: text || '(empty)', language, isBinary: false }
+    bodyState.value = { content: text || '', language, isBinary: false }
   } catch (error) {
     console.error('Failed to load body:', error)
     notify({ title: 'Error loading request body', description: 'Please try again', color: 'error' })

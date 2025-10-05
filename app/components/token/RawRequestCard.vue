@@ -15,6 +15,13 @@
             <UButton :disabled="!canCopyRaw" size="xs" variant="ghost" color="neutral" icon="i-lucide-copy"
               @click.stop="handleCopyRaw" />
           </UTooltip>
+
+          <UTooltip text="Download raw request">
+            <ULink type="button" variant="ghost" color="neutral" size="xs" role="button"
+              :href="`/api/token/${tokenId}/requests/${request?.id}/raw`" target="_blank">
+              <UIcon name="i-lucide-download" size="xs" class="h-4 w-4" />
+            </ULink>
+          </UTooltip>
           <UIcon :name="isOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
             class="h-5 w-5 text-gray-500 dark:text-gray-400" />
         </div>
@@ -27,9 +34,10 @@
         <div v-if="!request" class="flex h-32 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
           Select a request to view its raw payload.
         </div>
-        <div v-else-if="isBinary" class="p-4 text-sm text-gray-500 dark:text-gray-400">
-          <UIcon name="i-lucide-alert-circle" class="h-5 w-5 mr-2 inline-block" />
-          Raw preview disabled for binary bodies.
+        <div v-else-if="isBinary" 
+                class="flex h-40 flex-col items-center justify-center gap-2 p-4 text-sm text-gray-500 dark:text-gray-400">
+          <UIcon name="i-lucide-alert-circle" class="h-6 w-6" />
+          <span>Preview disabled for binary content.</span>
         </div>
         <div v-else-if="rawLoading"
           class="flex h-32 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -38,7 +46,7 @@
         <CodeHighlight v-else-if="rawValue" :code="rawValue" language="http" />
         <div v-else class="p-4 text-sm text-gray-500 dark:text-gray-400">
           <UIcon name="i-lucide-alert-circle" class="h-5 w-5 mr-2 inline-block" />
-          Raw body unavailable.
+          Raw request unavailable.
         </div>
       </div>
     </div>
