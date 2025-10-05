@@ -15,11 +15,20 @@
         <UButton v-if="showMobileClose" class="lg:hidden" type="button" color="neutral" variant="ghost"
           icon="i-lucide-x" aria-label="Close requests sidebar" @click="$emit('close')" />
 
-        <UButton type="button" color="neutral" variant="ghost" icon="i-lucide-copy" size="sm"
-          @click="$emit('copy-url')">Copy URL</UButton>
+        <UTooltip text="Copy Payload URL">
+          <UButton type="button" color="neutral" variant="ghost" icon="i-lucide-copy" size="sm"
+            aria-label="Copy Payload URL" @click="$emit('copy-url')" />
+        </UTooltip>
 
-        <UButton type="button" color="error" variant="ghost" icon="i-lucide-trash-2" size="sm"
-          aria-label="Clear all requests" :disabled="!requests.length" @click="$emit('clear')" />
+        <UTooltip text="Manual request Ingestion">
+          <UButton type="button" color="primary" variant="ghost" icon="i-lucide-upload" size="sm"
+            aria-label="Ingest request" @click="$emit('ingest')" />
+        </UTooltip>
+
+        <UTooltip text="Clear all requests">
+          <UButton type="button" color="error" variant="ghost" icon="i-lucide-trash-2" size="sm"
+            aria-label="Clear all requests" :disabled="!requests.length" @click="$emit('clear')" />
+        </UTooltip>
       </div>
     </div>
 
@@ -34,41 +43,48 @@
         </template>
 
         <template v-else>
-          <UButton v-for="request in requests" :key="request.id" type="button" color="neutral" variant="ghost" size="md"
-            class="group w-full justify-start rounded-xl border border-gray-200 text-left transition-all duration-150 dark:border-gray-700"
+          <div v-for="request in requests" :key="request.id"
+            class="group relative rounded-xl border border-gray-200 dark:border-gray-700 transition-all duration-150"
             :class="[selectedRequestId === request.id ? 'bg-primary-50/80 dark:bg-primary-900/30 border-primary-300 dark:border-primary-700' : 'hover:bg-gray-50 dark:hover:bg-gray-800',
-            incomingIds && incomingIds.has(request.id) ? 'ring-2 ring-success animate-pulse' : '']"
-            @click="$emit('select', request.id)">
-            <div class="flex w-full flex-col gap-2">
-              <div class="flex items-center gap-2">
-                <UBadge v-bind="getMethodBadgeProps(request.method)" class="uppercase tracking-wide" size="xs">
-                  {{ request.method }}
-                </UBadge>
+            incomingIds && incomingIds.has(request.id) ? 'ring-2 ring-success animate-pulse' : '']">
+            <UButton type="button" color="neutral" variant="ghost" size="md" class="w-full justify-start text-left"
+              @click="$emit('select', request.id)">
+              <div class="flex w-full flex-col gap-2">
+                <div class="flex items-center gap-2">
+                  <UBadge v-bind="getMethodBadgeProps(request.method)" class="uppercase tracking-wide" size="xs">
+                    {{ request.method }}
+                  </UBadge>
 
-                <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ request.id }}</span>
+                  <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ request.id }}</span>
 
-                <UBadge v-if="incomingIds && incomingIds.has(request.id)" color="success" variant="solid" size="xs"
-                  class="font-semibold uppercase">
-                  New
-                </UBadge>
+                  <UBadge v-if="incomingIds && incomingIds.has(request.id)" color="success" variant="solid" size="xs"
+                    class="font-semibold uppercase">
+                    New
+                  </UBadge>
 
-                <UBadge v-if="request.isBinary" color="primary" variant="outline" size="xs"
-                  class="ml-auto inline-flex items-center gap-1">
-                  <UIcon name="i-heroicons-document-arrow-down" class="h-3 w-3" />
-                  Binary
-                </UBadge>
+                  <div class="ml-auto inline-flex items-center gap-1">
+                    <UBadge v-if="request.isBinary" color="primary" variant="outline" size="xs">
+                      <UIcon name="i-heroicons-document-arrow-down" class="h-3 w-3" />
+                      BINARY
+                    </UBadge>
+                    <UTooltip text="Delete request">
+                      <UButton type="button" color="error" variant="ghost" icon="i-lucide-trash-2" size="xs"
+                        aria-label="Delete request" @click.stop="$emit('delete', request.id)" />
+                    </UTooltip>
+                  </div>
+                </div>
+
+                <div class="flex items-center text-xs text-gray-600 dark:text-gray-400">
+                  <span v-if="request.clientIp || request.remoteIp" class="truncate">
+                    {{ request.remoteIp || request.clientIp }}
+                  </span>
+                  <span class="ml-auto">
+                    {{ formatTime(request.createdAt) }}
+                  </span>
+                </div>
               </div>
-
-              <div class="flex items-center text-xs text-gray-600 dark:text-gray-400">
-                <span v-if="request.clientIp || request.remoteIp" class="truncate">
-                  {{ request.remoteIp || request.clientIp }}
-                </span>
-                <span class="ml-auto">
-                  {{ formatTime(request.createdAt) }}
-                </span>
-              </div>
-            </div>
-          </UButton>
+            </UButton>
+          </div>
         </template>
       </div>
     </div>
@@ -78,8 +94,8 @@
 <script setup lang="ts">
 
 defineEmits<{
-  (e: 'select', id: number): void
-  (e: 'copy-url' | 'clear' | 'close'): void
+  (e: 'select' | 'delete', id: number): void
+  (e: 'copy-url' | 'clear' | 'close' | 'ingest'): void
 }>()
 
 type RequestSummary = {

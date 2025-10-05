@@ -42,9 +42,14 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const url = row.url || '/'
   const method = row.method || 'GET'
 
-  const host = headers.host || headers.Host || 'localhost'
-  const protocol = headers['x-forwarded-proto'] || 'http'
-  const fullUrl = `${protocol}://${host}${url}`
+  // Determine the full URL - if url already contains protocol (http:// or https://), use it as-is
+  // Otherwise, construct it from headers
+  let fullUrl = url
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    const host = headers.host || headers.Host || 'localhost'
+    const protocol = headers['x-forwarded-proto'] || 'http'
+    fullUrl = `${protocol}://${host}${url}`
+  }
 
   const statusLine = `${method} ${process.env.RAW_FULL_URL ? fullUrl : url} HTTP/1.1`
   const headerLines = Object.entries(headers).map(

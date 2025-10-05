@@ -1,21 +1,25 @@
 <template>
   <UCard>
     <template #header>
-      <div class="flex flex-col gap-1">
-        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          Request details
-        </span>
-        <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
-          Inspect headers, query parameters, and the stored body.
-        </span>
-      </div>
+      <button type="button" class="w-full flex items-center justify-between text-left" @click="isOpen = !isOpen">
+        <div class="flex flex-col gap-1">
+          <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            Request details
+          </span>
+          <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
+            Inspect headers, query parameters, and the stored body.
+          </span>
+        </div>
+        <UIcon :name="isOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+          class="h-5 w-5 text-gray-500 dark:text-gray-400" />
+      </button>
     </template>
 
-    <div v-if="!request" class="p-8 text-center text-gray-500 dark:text-gray-400">
+    <div v-if="!request && isOpen" class="p-8 text-center text-gray-500 dark:text-gray-400">
       Select a request to view details.
     </div>
 
-    <div v-else class="space-y-6 p-4">
+    <div v-else-if="isOpen && request" class="space-y-6 p-4 border-t border-gray-200 dark:border-gray-700">
       <div class="flex flex-wrap items-center gap-3">
         <UBadge v-bind="getMethodBadgeProps(request.method)" class="uppercase tracking-wide" size="md">
           {{ request.method }}
@@ -26,24 +30,26 @@
         </UBadge>
 
         <template v-if="clientIp">
-          <UBadge color="neutral" variant="subtle" size="md" title="Click to copy client IP" role="button"
-            class="flex items-center gap-1 select-none cursor-pointer" @click="handleCopyIp">
-            <UIcon name="i-lucide-network" class="h-3 w-3" />
-            {{ clientIp }}
-          </UBadge>
+          <UTooltip text="Copy client IP">
+            <UBadge color="neutral" variant="subtle" size="md" role="button"
+              class="flex items-center gap-1 select-none cursor-pointer" @click="handleCopyIp">
+              <UIcon name="i-lucide-network" class="h-3 w-3" />
+              {{ clientIp }}
+            </UBadge>
+          </UTooltip>
           <ULink :to="`https://who.is/whois-ip/ip-address/${clientIp}`" external target="_blank"
             class="text-xs text-primary underline-offset-2 hover:underline">
             Whois
           </ULink>
         </template>
 
-        <template v-if="request.url">
+        <UTooltip v-if="request.url" text="Copy full request URL">
           <UBadge color="neutral" variant="subtle" size="sm" class="flex items-center gap-1 select-none cursor-pointer"
-            title="Copy full request URL" role="button" @click="handleCopyUrl">
+            role="button" @click="handleCopyUrl">
             <UIcon name="i-lucide-link" class="h-3 w-3" />
             {{ request.url }}
           </UBadge>
-        </template>
+        </UTooltip>
       </div>
 
       <div class="space-y-4">
@@ -160,10 +166,10 @@
               </div>
               <div class="flex items-center gap-1">
                 <div class="flex justify-end">
-                  <UButton v-if="isBinary || bodyState" type="button" color="success" size="md" icon="i-lucide-download"
-                    @click.stop="navigateTo(`/api/token/${tokenId}/requests/${request.id}/body/download`, { external: true })">
-                    Download
-                  </UButton>
+                  <UTooltip v-if="isBinary || bodyState" text="Download body">
+                    <UButton type="button" variant="ghost" color="neutral" size="xs" icon="i-lucide-download"
+                      @click.stop="navigateTo(`/api/token/${tokenId}/requests/${request.id}/body/download`, { external: true })" />
+                  </UTooltip>
                 </div>
                 <UIcon :name="isBodyOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
                   class="h-5 w-5 text-gray-500 dark:text-gray-400" />
@@ -223,6 +229,7 @@ type MethodBadgeProps = { color: BadgeColor, variant: BadgeVariant }
 
 const props = defineProps<{ request: RequestSummary | null, tokenId: string }>()
 
+const isOpen = usePersistedState('request-details-open', true)
 const bodyState = ref<BodyState | null>(null)
 const bodyLoading = ref(false)
 const isBodyOpen = usePersistedState('request-body-open', false)
@@ -470,9 +477,11 @@ const handleCopyUrl = async () => {
     url = `${origin}${props.request.url.startsWith('/') ? '' : '/'}${props.request.url}`
   }
 
-  if (false === (await copyText(url))) {
-    notify({ title: 'Request URL copied', color: 'success' })
+  if (true !== (await copyText(url))) {
+    return
   }
+
+  notify({ title: 'Request URL copied', description: url, color: 'success' })
 }
 
 const handleCopyIp = async () => {
@@ -484,6 +493,6 @@ const handleCopyIp = async () => {
     return
   }
 
-  notify({ title: 'Client IP copied', color: 'success', })
+  notify({ title: 'Client IP copied', description: clientIp.value, color: 'success' })
 }
 </script>

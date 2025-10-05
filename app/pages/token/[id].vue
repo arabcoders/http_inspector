@@ -8,7 +8,8 @@
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       ]" :requests="requests" :selected-request-id="selectedRequestId" :incoming-ids="incomingIds"
         :copy-state="copyState" show-mobile-close @close="closeSidebar" @select="handleSelectRequest"
-        @copy-url="copyPayloadURL" @clear="showClearModal = true" />
+        @copy-url="copyPayloadURL" @clear="showClearModal = true" @ingest="showIngestModal = true"
+        @delete="handleDeleteRequest" />
 
       <ClientOnly>
         <main class="flex-1 overflow-y-auto bg-background">
@@ -19,14 +20,20 @@
             <UBadge v-if="selectedRequest" size="sm">
               {{ selectedRequest.id }}
             </UBadge>
-            <UButton type="button" variant="soft" color="error" icon="i-lucide-trash-2" :disabled="!requests.length"
-              @click="showClearModal = true">
-              Clear All
-            </UButton>
+            <div class="flex gap-2">
+              <UButton type="button" variant="soft" color="primary" icon="i-lucide-upload"
+                @click="showIngestModal = true">
+                Ingest
+              </UButton>
+              <UButton type="button" variant="soft" color="error" icon="i-lucide-trash-2" :disabled="!requests.length"
+                @click="showClearModal = true">
+                Clear
+              </UButton>
+            </div>
           </div>
           <div class="grid gap-6 px-6 pb-6 lg:p-6">
             <ResponseSettingsCard :token-id="tokenId" />
-            <RawRequestCard :request="selectedRequest" :token-id="tokenId" />
+            <RawRequestCard v-if="!selectedRequest?.isBinary" :request="selectedRequest" :token-id="tokenId" />
             <RequestDetailsCard :request="selectedRequest" :token-id="tokenId" />
           </div>
         </main>
@@ -36,6 +43,8 @@
     <ConfirmModal v-model="showClearModal" title="Clear All Requests"
       description="Are you sure you want to delete all requests for this token? This action cannot be undone."
       confirm-label="Clear All" @confirm="handleClearRequests" />
+
+    <IngestRequestModal v-model="showIngestModal" :token-id="tokenId" @success="handleIngestSuccess" />
   </div>
 </template>
 
@@ -49,6 +58,7 @@ import RequestSidebar from '~/components/RequestSidebar.vue'
 import ResponseSettingsCard from '~/components/token/ResponseSettingsCard.vue'
 import RequestDetailsCard from '~/components/token/RequestDetailsCard.vue'
 import RawRequestCard from '~/components/token/RawRequestCard.vue'
+import IngestRequestModal from '~/components/IngestRequestModal.vue'
 import { copyText } from '~/utils'
 
 const route = useRoute()
@@ -74,6 +84,7 @@ const selectedRequestId = ref<number | null>(null)
 const incomingIds = ref<Set<number>>(new Set())
 const copyState = ref<'idle' | 'copied'>('idle')
 const showClearModal = ref(false)
+const showIngestModal = ref(false)
 const isSidebarOpen = useState<boolean>('token-request-sidebar-open', () => false)
 const tokenExists = ref(false)
 
@@ -157,6 +168,28 @@ const handleSelectRequest = async (id: number) => {
   }
 }
 
+const handleDeleteRequest = async (id: number) => {
+  try {
+    const res = await fetch(`/api/token/${tokenId.value}/requests/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      requests.value = requests.value.filter(r => r.id !== id)
+
+      // If the deleted request was selected, clear selection or select next
+      if (selectedRequestId.value === id) {
+        const firstRequest = requests.value.length > 0 ? requests.value[0] : null
+        selectedRequestId.value = firstRequest ? firstRequest.id : null
+      }
+
+      notify({ title: 'Request deleted', variant: 'success' })
+    } else {
+      throw new Error('Failed to delete request')
+    }
+  } catch (error) {
+    console.error('Failed to delete request:', error)
+    notify({ title: 'Failed to delete request', variant: 'error' })
+  }
+}
+
 const copyPayloadURL = async () => {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const url = `${origin}/api/payload/${tokenId.value}`
@@ -185,6 +218,20 @@ const handleClearRequests = async () => {
     console.error('Failed to clear requests:', error)
     notify({ title: 'Failed to delete requests', variant: 'error' })
   }
+}
+
+const handleIngestSuccess = async (requestId: number) => {
+  // Reload requests to get the newly ingested request
+  await loadRequests()
+
+  // Select the newly ingested request
+  selectedRequestId.value = requestId
+
+  notify({
+    title: 'Request ingested',
+    description: `Request #${requestId} has been added successfully`,
+    variant: 'success'
+  })
 }
 
 const openSidebar = () => isSidebarOpen.value = true
@@ -247,7 +294,7 @@ const handleClientEvent = (payload: SSEEventPayload) => {
         break
       }
       console.log('Deleting request with ID:', payload.requestId, requests.value.map(r => r.id))
-      
+
       requests.value = requests.value.filter(r => r.id !== payload.requestId)
 
       if (selectedRequestIdRef.value === payload.requestId) {

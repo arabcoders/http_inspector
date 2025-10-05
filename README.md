@@ -249,7 +249,7 @@ Delete a single stored request. **Response:** `{ "ok": true }`
 #### DELETE /api/token/{tokenId}/requests
 Delete all stored requests for a token. **Response:** `{ "ok": true }`
 
-#### POST /api/token/{tokenId}
+#### POST /api/token/{tokenId}/ingest
 Manually ingest a raw HTTP request into the system.
 
 **Request Body:**
@@ -281,7 +281,7 @@ Manually ingest a raw HTTP request into the system.
 **Example:**
 ```bash
 # Ingest a previously exported raw request with path-only URL
-curl -X POST http://localhost:3000/api/token/your-token-id \
+curl -X POST http://localhost:3000/api/token/your-token-id/ingest \
   -H "Content-Type: application/json" \
   -d '{
     "raw": "POST /api/data HTTP/1.1\r\nHost: api.example.com\r\nContent-Type: application/json\r\n\r\n{\"name\":\"test\"}",
@@ -289,7 +289,7 @@ curl -X POST http://localhost:3000/api/token/your-token-id \
   }'
 
 # Ingest a request with full URL
-curl -X POST http://localhost:3000/api/token/your-token-id \
+curl -X POST http://localhost:3000/api/token/your-token-id/ingest \
   -H "Content-Type: application/json" \
   -d '{
     "raw": "GET https://api.example.com/webhook?token=abc123 HTTP/1.1\r\nHost: api.example.com\r\nAuthorization: Bearer token\r\n\r\n"

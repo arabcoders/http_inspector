@@ -35,8 +35,7 @@
                         <div class="flex items-start justify-between gap-3">
                             <div class="space-y-1 flex-1 min-w-0">
                                 <ULink :to="`/token/${token.id}`"
-                                    class="font-mono text-sm text-primary hover:underline block truncate"
-                                    :title="token.id">
+                                    class="font-mono text-sm text-primary hover:underline block truncate">
                                     {{ token.id }}
                                 </ULink>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">

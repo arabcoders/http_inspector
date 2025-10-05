@@ -75,7 +75,7 @@ describe('POST /api/token/[token]/ingest', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
     h3Module = await import('h3') as typeof import('h3') & { __setMockBody?: (value: unknown) => void }
-    handler = (await import('../../server/api/token/[token]/index.post')).default
+    handler = (await import('../../server/api/token/[token]/ingest.post')).default
   })
 
   afterEach(() => {

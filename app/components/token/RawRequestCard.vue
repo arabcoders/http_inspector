@@ -11,7 +11,7 @@
           </span>
         </div>
         <div class="flex items-center gap-1">
-          <UTooltip :text="canCopyRaw ? 'Copy raw request' : 'Raw request not loaded'" :shortcuts="[]">
+          <UTooltip v-if="!isBinary" :text="canCopyRaw ? 'Copy raw request' : 'Raw request not loaded'">
             <UButton :disabled="!canCopyRaw" size="xs" variant="ghost" color="neutral" icon="i-lucide-copy"
               @click.stop="handleCopyRaw" />
           </UTooltip>
