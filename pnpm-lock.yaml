@@ -81,9 +81,6 @@ importers:
       '@types/node':
         specifier: ^24.6.1
         version: 24.6.1
-      '@vueuse/core':
-        specifier: ^13.9.0
-        version: 13.9.0(vue@3.5.22(typescript@5.9.3))
       drizzle-kit:
         specifier: ^0.31.5
         version: 0.31.5

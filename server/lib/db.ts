@@ -6,8 +6,6 @@ import { customAlphabet } from 'nanoid'
 
 const tokenIdGenerator = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8)
 
-export type { Token, Request, TokenWithCount }
-
 export const createToken = async (sessionId: string): Promise<Token> => {
   const db = getDb()
   const id = tokenIdGenerator()

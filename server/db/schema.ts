@@ -50,15 +50,3 @@ export const keyValueStore = sqliteTable('key_value_store', {
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 })
-
-// Re-export types from shared for consistency
-export type {
-    Session,
-    InsertSession,
-    Token,
-    InsertToken,
-    Request,
-    InsertRequest,
-    KeyValue,
-    InsertKeyValue
-} from '~~/shared/types'

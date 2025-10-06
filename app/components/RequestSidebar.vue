@@ -95,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import type { RequestSummary } from '~~/shared/types'
+import type { RequestSummary, MethodBadgeProps } from '~~/shared/types'
 
 defineEmits<{
   (e: 'select' | 'delete', id: number): void
@@ -109,14 +109,6 @@ defineProps<{
   incomingIds?: Set<number>
   showMobileClose?: boolean
 }>()
-
-type BadgeColor = 'primary' | 'neutral' | 'info' | 'success' | 'warning' | 'error'
-type BadgeVariant = 'solid' | 'soft' | 'outline' | 'subtle'
-
-type MethodBadgeProps = {
-  color: BadgeColor
-  variant: BadgeVariant
-}
 
 const getMethodBadgeProps = (method: string): MethodBadgeProps => {
   const normalized = method.toUpperCase()

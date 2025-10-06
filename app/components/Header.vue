@@ -96,7 +96,8 @@
 import { computed, watch, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTokens } from '~/composables/useTokens'
-import { useSSE, type SSEEventPayload } from '~/composables/useSSE'
+import { useSSE } from '~/composables/useSSE'
+import type { SSEEventPayload } from '~~/shared/types'
 import { notify } from '~/composables/useNotificationBridge'
 import { copyText, shortSlug } from '~/utils'
 

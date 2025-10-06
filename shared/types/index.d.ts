@@ -220,3 +220,31 @@ export interface NotificationPayload {
     timeout?: number
     actions?: { label: string; onClick: () => void }[]
 }
+
+// ============================================================================
+// UI Component Types
+// ============================================================================
+
+export type BadgeColor = 'primary' | 'neutral' | 'info' | 'success' | 'warning' | 'error'
+export type BadgeVariant = 'solid' | 'soft' | 'outline' | 'subtle'
+
+export interface MethodBadgeProps {
+    color: BadgeColor
+    variant: BadgeVariant
+}
+
+export interface QueryParam {
+    key: string
+    value: string
+}
+
+export interface HeaderParam {
+    key: string
+    value: string
+}
+
+export interface BodyState {
+    content: string
+    language: string
+    isBinary: boolean
+}

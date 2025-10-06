@@ -210,15 +210,7 @@ import { computed, watch, ref } from 'vue'
 import { copyText } from '~/utils'
 import { notify } from '~/composables/useNotificationBridge'
 import CodeHighlight from '~/components/CodeHighlight.vue'
-import type { RequestSummary } from '~~/shared/types'
-
-type QueryParam = { key: string; value: string }
-type HeaderParam = { key: string; value: string }
-type BodyState = { content: string, language: string, isBinary: boolean }
-
-type BadgeColor = 'primary' | 'neutral' | 'info' | 'success' | 'warning' | 'error'
-type BadgeVariant = 'solid' | 'soft' | 'outline' | 'subtle'
-type MethodBadgeProps = { color: BadgeColor, variant: BadgeVariant }
+import type { RequestSummary, QueryParam, HeaderParam, BodyState, MethodBadgeProps } from '~~/shared/types'
 
 const props = defineProps<{ request: RequestSummary | null, tokenId: string }>()
 

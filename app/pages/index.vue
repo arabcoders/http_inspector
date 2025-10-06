@@ -43,11 +43,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed, ref } from 'vue'
 import { marked } from 'marked'
-import { useSSE, type SSEEventPayload } from '~/composables/useSSE'
+import { useSSE } from '~/composables/useSSE'
 import { useTokens } from '~/composables/useTokens'
 import { copyText } from '~/utils'
 import { notify } from '~/composables/useNotificationBridge'
-import type { TokenListItem } from '~~/shared/types'
+import type { TokenListItem, SSEEventPayload } from '~~/shared/types'
 
 const { tokens, loadTokens, createToken, clearTokens } = useTokens()
 
@@ -106,7 +106,7 @@ const deleteToken = (id: string) => {
   showDeleteTokenModal.value = true
 }
 
-const handleClientEvent = (payload: SSEEventPayload) => {
+const handleClientEvent = (payload: SSEEventPayload): void => {
   const tokenId = payload.token as string
 
   switch (payload.type) {

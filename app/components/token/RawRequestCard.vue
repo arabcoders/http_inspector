@@ -58,8 +58,8 @@ import { ref, computed, watch } from 'vue'
 import { copyText } from '~/utils'
 import CodeHighlight from '~/components/CodeHighlight.vue'
 import { notify } from '~/composables/useNotificationBridge'
+import type { RequestSummary } from '~~/shared/types'
 
-type RequestSummary = { id: number, method: string, isBinary?: boolean, }
 const props = defineProps<{ request: RequestSummary | null, tokenId: string }>()
 
 const isOpen = usePersistedState('raw-request-open', false)

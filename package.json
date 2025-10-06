@@ -44,7 +44,6 @@
     "@tailwindcss/typography": "^0.5.19",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.6.1",
-    "@vueuse/core": "^13.9.0",
     "drizzle-kit": "^0.31.5",
     "tsx": "^4.20.6",
     "vitest": "^3.2.4"

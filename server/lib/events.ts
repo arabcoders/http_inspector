@@ -10,14 +10,11 @@
  */
 
 import type {
-    ServerEventMap,
     ServerEventType,
     ServerEventPayload,
     Subscriber,
     ChannelType
 } from '~~/shared/types'
-
-export type { ServerEventMap, ServerEventType, ServerEventPayload, Subscriber, ChannelType }
 
 /**
  * Internal subscriber storage

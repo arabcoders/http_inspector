@@ -10,16 +10,6 @@ import type {
     SSEStatusListener
 } from '~~/shared/types'
 
-export type {
-    SSEConnectionStatus,
-    SSEEventPayload,
-    SSEEventMap,
-    SSEEventType,
-    SSEEventListener,
-    SSEGenericEventListener,
-    SSEStatusListener
-}
-
 let eventSource: EventSource | null = null
 let reconnectAttempts = 0
 let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null

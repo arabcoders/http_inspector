@@ -10,8 +10,6 @@ import { eq } from 'drizzle-orm'
 const SESSION_COOKIE_NAME = 'http_inspector_session'
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60 // 30 days in seconds
 
-export type { Session }
-
 export const getOrCreateSession = async (event: H3Event): Promise<string> => {
   const existingSessionId = getCookie(event, SESSION_COOKIE_NAME)
 

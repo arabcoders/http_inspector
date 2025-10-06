@@ -11,8 +11,6 @@ import type {
     NotificationPayload
 } from '~~/shared/types'
 
-export type { NotificationVariant, NotificationType, ToastColor, NotificationPayload }
-
 /**
  * Maps notification variants to appropriate icons
  */

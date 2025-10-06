@@ -52,7 +52,8 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
-import { useSSE, type SSEEventPayload } from '~/composables/useSSE'
+import { useSSE } from '~/composables/useSSE'
+import type { SSEEventPayload, RequestSummary } from '~~/shared/types'
 import { notify } from '~/composables/useNotificationBridge'
 import RequestSidebar from '~/components/RequestSidebar.vue'
 import ResponseSettingsCard from '~/components/token/ResponseSettingsCard.vue'
@@ -60,7 +61,6 @@ import RequestDetailsCard from '~/components/token/RequestDetailsCard.vue'
 import RawRequestCard from '~/components/token/RawRequestCard.vue'
 import IngestRequestModal from '~/components/IngestRequestModal.vue'
 import { copyText } from '~/utils'
-import type { RequestSummary } from '~~/shared/types'
 
 const route = useRoute()
 
