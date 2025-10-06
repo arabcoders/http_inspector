@@ -104,9 +104,7 @@ export async function ingestRequest(
         remoteIp
     )
 
-    const tokenString = await db.tokens.getTokenString(tokenId) || tokenId
-
-    useServerEvents().publish(sessionId, 'request.received', { token: tokenString, request: created })
+    useServerEvents().publish(sessionId, 'request.received', { token: tokenId, request: created })
 
     return created
 }

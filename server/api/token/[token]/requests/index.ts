@@ -9,7 +9,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   type EventParams = { params?: Record<string, string> }
   const ctx = (event.context as unknown as EventParams) || {}
   const params = ctx.params || {}
-  const tokenString = params.token
+  const tokenId = params.token
   const events = useServerEvents()
   const db = useDatabase()
 
@@ -17,18 +17,18 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     throw createError({ statusCode: 405, message: 'Method not allowed' })
   }
 
-  if (!tokenString) {
+  if (!tokenId) {
     throw createError({ statusCode: 400, message: 'Token ID is required' })
   }
 
-  const token = await db.tokens.get(sessionId, tokenString)
+  const token = await db.tokens.get(sessionId, tokenId)
   if (!token) {
     throw createError({ statusCode: 404, message: 'Token not found' })
   }
 
   if ('DELETE' === method) {
     await db.requests.deleteAll(sessionId, token.id)
-    events.publish(sessionId, 'request.cleared', { token: tokenString })
+    events.publish(sessionId, 'request.cleared', { token: tokenId })
     return { ok: true }
   }
 

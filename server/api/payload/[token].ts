@@ -44,10 +44,10 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   type EventContextParams = { params?: Record<string, string> }
   const ctx = (event.context as unknown as EventContextParams) || {}
   const params = ctx.params || {}
-  const tokenString = params.token as string | undefined
+  const tokenId = params.token as string | undefined
   const db = useDatabase()
   
-  if (!tokenString) {
+  if (!tokenId) {
     event.node.res.statusCode = 404
     event.node.res.end('not found')
     return
@@ -73,7 +73,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     return
   }
 
-  const sessionId = await db.tokens.getSessionId(tokenString)
+  const sessionId = await db.tokens.getSessionId(tokenId)
 
   if (!sessionId) {
     event.node.res.statusCode = 404
@@ -81,36 +81,38 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     return
   }
 
-  const token = await db.tokens.get(sessionId, tokenString)
+  const userToken = await db.tokens.get(sessionId, tokenId)
 
-  if (!token) {
+  if (!userToken) {
     event.node.res.statusCode = 404
     event.node.res.end()
     return
   }
 
   let buf: Buffer | null = null
-  try {
-    const body = await readRawBody(event, false)
-    if (body) {
-      buf = Buffer.isBuffer(body) ? body : Buffer.from(body)
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    try {
+      const body = await readRawBody(event, false)
+      if (body) {
+        buf = Buffer.isBuffer(body) ? body : Buffer.from(body)
+      }
+    } catch (err) {
+      console.warn('failed to read body', err)
     }
-  } catch (err) {
-    console.warn('failed to read body', err)
   }
 
   // Ingest the request and publish events
   await ingestRequest(
     sessionId,
-    token.id,
+    userToken.id,
     method,
     headersObj,
     buf,
-    event.node.req.url || '/api/payload/' + tokenString,
+    event.node.req.url || '/api/payload/' + tokenId,
     event.node.req.socket.remoteAddress || '127.0.0.1'
   )
 
-  const resp = await buildResponse(token)
+  const resp = await buildResponse(userToken)
 
   for (const [k, v] of Object.entries(CORS_HEADERS)) {
     event.node.res.setHeader(k, v)

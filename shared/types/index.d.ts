@@ -12,8 +12,8 @@ export interface Session {
  * Token entity for webhook endpoints
  */
 export interface Token {
-    id: string // UUID - internal primary key
-    token: string // User-visible token string
+    id: string // UUID - primary key, used for all operations
+    token: string // DEPRECATED: 8-char display string, kept for data compatibility
     sessionId: string // References session.id (UUID)
     createdAt: Date
     responseEnabled: boolean

@@ -35,9 +35,9 @@
                         :class="[incomingTokenIds && incomingTokenIds.has(token.id) ? 'ring-2 ring-success animate-pulse' : '']">
                         <div class="flex items-start justify-between gap-3 mb-1">
                             <div class="flex-1 min-w-0 flex items-center gap-2">
-                                <ULink :to="`/token/${token.token}`"
+                                <ULink :to="`/token/${token.id}`"
                                     class="font-mono text-sm text-primary hover:underline block truncate">
-                                    {{ token.token }}
+                                    {{ shortSlug(token.id) }}
                                 </ULink>
                                 <UBadge v-if="incomingTokenIds && incomingTokenIds.has(token.id)" color="success" variant="solid" size="xs"
                                     class="font-semibold uppercase">
@@ -74,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-import { formatDate } from '~/utils'
+import { formatDate, shortSlug } from '~/utils'
 import type { TokenListItem } from '~~/shared/types'
 
 const props = defineProps<{

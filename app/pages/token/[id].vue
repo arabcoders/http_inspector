@@ -211,23 +211,7 @@ const handleClearRequests = async () => {
   }
 }
 
-const handleIngestSuccess = async (requestId: string) => {
-  // Reload requests to get the newly ingested request
-  await loadRequests()
-
-  // Select the newly ingested request
-  selectedRequestId.value = requestId
-
-  // Find the request number for display
-  const requestNumber = requests.value.findIndex(r => r.id === requestId) + 1
-
-  notify({
-    title: 'Request ingested',
-    description: `Request #${requestNumber} has been added successfully`,
-    variant: 'success'
-  })
-}
-
+const handleIngestSuccess = async () => await loadRequests()
 const openSidebar = () => isSidebarOpen.value = true
 const closeSidebar = () => isSidebarOpen.value = false
 
@@ -264,7 +248,9 @@ const handleClientEvent = (payload: SSEEventPayload) => {
         }, 3000)
       }
 
-      const requestNumber = requests.value.findIndex(r => r.id === incoming.id) + 1
+      // Calculate request number: requests are in reverse order (newest first)
+      const index = requests.value.findIndex(r => r.id === incoming.id)
+      const requestNumber = index !== -1 ? requests.value.length - index : requests.value.length
 
       notify({
         title: `Request ${incoming.method}`,

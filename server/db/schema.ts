@@ -12,8 +12,8 @@ export const sessions = sqliteTable('sessions', {
 ])
 
 export const tokens = sqliteTable('tokens', {
-    id: text('id').primaryKey(), // UUID - internal primary key
-    token: text('token').notNull().unique(), // User-visible token string (the webhook token)
+    id: text('id').primaryKey(), // UUID - primary key used for all operations
+    token: text('token').notNull().unique(), // DEPRECATED: 8-char display string, kept for data compatibility
     sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     responseEnabled: integer('response_enabled', { mode: 'boolean' }).notNull().default(false),
@@ -21,7 +21,7 @@ export const tokens = sqliteTable('tokens', {
     responseHeaders: text('response_headers'),
     responseBody: text('response_body'),
 }, (table) => [
-    index('token_token_idx').on(table.token),
+    index('token_id_idx').on(table.id), // Primary lookup by ID
     index('token_session_idx').on(table.sessionId),
     index('token_created_idx').on(table.createdAt), // For cleanup based on TTL
 ])

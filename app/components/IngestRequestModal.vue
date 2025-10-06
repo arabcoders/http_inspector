@@ -84,7 +84,7 @@ Content-Type: application/json
                         <div class="ml-3">
                             <h3 class="text-sm font-medium text-green-800 dark:text-green-200">Success</h3>
                             <div class="mt-2 text-sm text-green-700 dark:text-green-300">
-                                Request #{{ success.id }} has been ingested successfully
+                                Successfully ingested request.
                             </div>
                         </div>
                     </div>
@@ -112,7 +112,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void
-    (e: 'success', requestId: string): void
+    (e: 'success'): void
 }>()
 
 const isOpen = computed({
@@ -222,13 +222,10 @@ const handleIngest = async () => {
         const data = await res.json()
         success.value = { id: data.request.id }
 
-        // Emit success event with request ID
-        emit('success', data.request.id)
+        emit('success')
 
         // Close modal after a short delay to show success message
-        setTimeout(() => {
-            handleCancel()
-        }, 1500)
+        setTimeout(() => handleCancel(), 1500)
     } catch (err) {
         error.value = err instanceof Error ? err.message : 'Failed to ingest request'
         console.error('Failed to ingest request:', err)

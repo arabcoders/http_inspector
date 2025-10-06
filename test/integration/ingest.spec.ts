@@ -59,13 +59,10 @@ const mockGetToken = vi.fn(async (_sessionId: string, tokenId: string): Promise<
   responseBody: null,
 }))
 
-const mockGetTokenString = vi.fn(async (tokenId: string): Promise<string | null> => tokenId)
-
 vi.mock('~~/server/lib/db', () => ({
   useDatabase: vi.fn(() => ({
     tokens: {
       get: mockGetToken,
-      getTokenString: mockGetTokenString,
     },
     requests: {
       create: mockInsertRequest,

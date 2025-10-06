@@ -37,7 +37,7 @@ export const shortSlug = (id: string) => {
     return id
   }
 
-  return `${id.slice(0, 8)}…${id.slice(-4)}`
+  return `${id.slice(0, 4)}…${id.slice(-4)}`
 }
 
 export const formatDate = (iso?: string) => {

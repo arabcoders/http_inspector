@@ -75,10 +75,10 @@ export const useDatabase = () => {
     },
 
     /**
-     * Get a token by token string, verifying it belongs to the session
+     * Get a token by token ID, verifying it belongs to the session
      */
-    get: async (sessionId: string, tokenString: string): Promise<Token | null> => {
-      const result = await db.select().from(tokensSchema).where(eq(tokensSchema.token, tokenString)).limit(1)
+    get: async (sessionId: string, tokenId: string): Promise<Token | null> => {
+      const result = await db.select().from(tokensSchema).where(eq(tokensSchema.id, tokenId)).limit(1)
 
       if (!result.length || result[0].sessionId !== sessionId) {
         return null
@@ -127,35 +127,35 @@ export const useDatabase = () => {
      */
     update: async (
       sessionId: string,
-      tokenString: string,
+      tokenId: string,
       updates: Partial<Pick<Token, 'responseEnabled' | 'responseStatus' | 'responseHeaders' | 'responseBody'>>
     ): Promise<Token | null> => {
       // Verify token belongs to session
-      const existing = await tokens.get(sessionId, tokenString)
+      const existing = await tokens.get(sessionId, tokenId)
       if (!existing) {
         return null
       }
 
-      await db.update(tokensSchema).set(updates).where(eq(tokensSchema.token, tokenString))
+      await db.update(tokensSchema).set(updates).where(eq(tokensSchema.id, tokenId))
 
-      return tokens.get(sessionId, tokenString)
+      return tokens.get(sessionId, tokenId)
     },
 
     /**
      * Delete a single token and its associated request bodies
      */
-    _delete: async (sessionId: string, tokenString: string): Promise<void> => {
+    _delete: async (sessionId: string, tokenId: string): Promise<void> => {
       // Verify token belongs to session before deleting
-      const token = await tokens.get(sessionId, tokenString)
+      const token = await tokens.get(sessionId, tokenId)
       if (!token) {
         return
       }
 
       // Delete body files from disk
-      await storage.deleteToken(sessionId, token.token)
+      await storage.deleteToken(sessionId, token.id)
 
       // Cascade delete will handle requests automatically
-      await db.delete(tokensSchema).where(eq(tokensSchema.token, tokenString))
+      await db.delete(tokensSchema).where(eq(tokensSchema.id, tokenId))
     },
 
     /**
@@ -164,13 +164,13 @@ export const useDatabase = () => {
     deleteAll: async (sessionId: string): Promise<void> => {
       // Get all tokens for this session to clean up their bodies
       const sessionTokens = await db
-        .select({ id: tokensSchema.id, token: tokensSchema.token })
+        .select({ id: tokensSchema.id })
         .from(tokensSchema)
         .where(eq(tokensSchema.sessionId, sessionId))
 
       // Delete body files for each token
       for (const token of sessionTokens) {
-        await storage.deleteToken(sessionId, token.token)
+        await storage.deleteToken(sessionId, token.id)
       }
 
       // Cascade delete will handle requests automatically
@@ -178,33 +178,16 @@ export const useDatabase = () => {
     },
 
     /**
-     * Get session ID for a token.
+     * Get session ID for a token by token ID
      */
-    getSessionId: async (tokenString: string): Promise<string | null> => {
+    getSessionId: async (tokenId: string): Promise<string | null> => {
       const result = await db
         .select({ sessionId: tokensSchema.sessionId })
-        .from(tokensSchema)
-        .where(eq(tokensSchema.token, tokenString))
-        .limit(1)
-
-      return result.length ? result[0].sessionId : null
-    },
-
-    /**
-     * Get token string by token ID
-     * 
-     * @param tokenId Token ID (UUID)
-     * 
-     * @returns Token string or null if not found
-     */
-    getTokenString: async (tokenId: string): Promise<string | null> => {
-      const result = await db
-        .select({ token: tokensSchema.token })
         .from(tokensSchema)
         .where(eq(tokensSchema.id, tokenId))
         .limit(1)
 
-      return result.length ? result[0].token : null
+      return result.length ? result[0].sessionId : null
     },
   }
 
@@ -249,7 +232,6 @@ export const useDatabase = () => {
         bodyPath,
         createdAt: new Date(),
       }
-      console.log('Inserting request:', dat)
       const request: typeof requestsSchema.$inferInsert = dat
 
       const result = await db.insert(requestsSchema).values(request).returning()
