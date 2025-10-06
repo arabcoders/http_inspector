@@ -1,5 +1,5 @@
 import { readRawBody, defineEventHandler, type H3Event, type EventHandlerRequest } from 'h3'
-import { getToken, getSessionIdForToken, type Token } from '~~/server/lib/redis-db'
+import { getToken, getSessionIdForToken, type Token } from '~~/server/lib/db'
 import { ingestRequest } from '~~/server/lib/request-ingestion'
 
 const CORS_HEADERS: Record<string, string> = {

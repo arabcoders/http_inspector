@@ -60,24 +60,11 @@ import RequestDetailsCard from '~/components/token/RequestDetailsCard.vue'
 import RawRequestCard from '~/components/token/RawRequestCard.vue'
 import IngestRequestModal from '~/components/IngestRequestModal.vue'
 import { copyText } from '~/utils'
+import type { RequestSummary } from '~~/shared/types'
 
 const route = useRoute()
 
 const tokenId = computed(() => String(route.params.id || ''))
-
-type RequestSummary = {
-  id: number
-  tokenId: string
-  method: string
-  headers: string
-  url: string
-  body?: string | null
-  contentType?: string
-  isBinary: boolean
-  clientIp?: string
-  remoteIp?: string
-  createdAt: string
-}
 
 const requests = ref<RequestSummary[]>([])
 const selectedRequestId = ref<number | null>(null)

@@ -20,10 +20,10 @@ COPY --from=base /app/.output /app
 COPY README.md /app
 
 ENV NODE_ENV=production
-ENV REDIS_URL=redis://redis:6379
+ENV DATABASE_PATH=/config/http-inspector.sqlite
+
+RUN mkdir -p /config
 
 EXPOSE 3000
-
-USER node
 
 CMD ["/usr/local/bin/node", "/app/server/index.mjs"]

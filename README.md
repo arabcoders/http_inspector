@@ -15,71 +15,125 @@ HTTP Inspector is a self-hosted debugging console for capturing, inspecting, and
 ## Run with Containers
 
 ### Docker/Podman `run`
-Both Docker and Podman work with the same flags; substitute `podman` for `docker` if you prefer Podman. The example below starts Redis and the inspector in a shared network and publishes the UI on port 3001.
+Both Docker and Podman work with the same flags; substitute `podman` for `docker` if you prefer Podman. The example below starts the inspector with a persistent volume for the SQLite database and publishes the UI on port 3001.
 
 ```bash
-docker network create http_inspector_net
-docker run -d --name http_redis --network http_inspector_net redis:7-alpine
 docker run -d \
   --name http_inspector \
-  --network http_inspector_net \
   -p 3001:3000 \
-  -e REDIS_URL=redis://http_redis:6379 \
+  -v http_inspector_data:/config \
   ghcr.io/arabcoders/http_inspector:latest
 ```
 
-Stop the stack with `docker rm -f http_inspector http_redis` (or `podman rm -f …`).
-
-### Docker Compose / Podman Compose
+### Compose
 
 ```yaml
 services:
-  http_redis:
-    image: redis:latest
-    container_name: http_redis
-    command: redis-server
-    volumes:
-      - redis-data:/data
-    restart: unless-stopped
-
   http_inspector:
     image: ghcr.io/arabcoders/http_inspector:latest
-    build: .
     container_name: http_inspector
     restart: unless-stopped
     ports:
       - "3001:3000"
+    volumes:
+      - http_inspector_data:/config
     environment:
-      - REDIS_URL=redis://http_redis:6379
-    depends_on:
-      - http_redis
+      - TRUST_PROXY_CLIENT_IP=false
 
 volumes:
-  redis-data:
+  http_inspector_data:
 ```
 
-Use the provided `compose.yaml` to launch both services together from the repository root.
+Use the provided `compose.yaml` to launch the service from the repository root.
 
 ```bash
 docker compose up -d
 # podman compose up -d
 ```
 
-The UI is available at http://localhost:3001 and containers persist until you run `docker compose down` (or `podman compose down`).
+The UI is available at http://localhost:3001 and the container persists until you run `docker compose down` (or `podman compose down`).
+
+> ![NOTE]
+> The default container run using the root user for simplicity. For production deployments, consider running as a non-root user by adding `user: "1000:1000"` (or similar) to the Compose service definition or Docker run command. 
 
 ## Environment Variables
 
-| Variable                    | Required | Default                    | Description                                                   |
-| --------------------------- | -------- | -------------------------- | ------------------------------------------------------------- |
-| **REDIS_URL**               | Yes      | **redis://localhost:6379** | Redis connection string                                       |
-| **SESSION_TTL_DAYS**        | No       | **30**                     | Session lifetime in days before automatic cleanup             |
-| **TOKEN_TTL_DAYS**          | No       | **30**                     | Token lifetime in days before automatic cleanup               |
-| **REQUEST_TTL_DAYS**        | No       | **7**                      | Request history lifetime in days                              |
-| **TRUST_PROXY_CLIENT_IP**   | No       | *false*                    | Honor **X-Forwarded-For** when running behind a trusted proxy |
-| **AUTH_USERNAME**           | No       | **-**                      | Username required for login when authentication is enabled    |
-| **AUTH_PASSWORD**           | No       | **-**                      | Password required for login when authentication is enabled    |
-| **SESSION_RESTORE_ENABLED** | No       | **true**                   | Enable restoring previous sessions by friendly ID             |
-| **RAW_FULL_URL**            | No       | **false**                  | Include full URL in raw request output                        |
+| Variable                    | Required | Default       | Description                                                    |
+| --------------------------- | -------- | ------------- | -------------------------------------------------------------- |
+| **DATABASE_PATH**           | No       | **automated** | Path to SQLite database file                                   |
+| **SESSION_TTL_DAYS**        | No       | **30**        | Session lifetime in days before automatic cleanup              |
+| **TOKEN_TTL_DAYS**          | No       | **30**        | Token lifetime in days before automatic cleanup                |
+| **REQUEST_TTL_DAYS**        | No       | **7**         | Request history lifetime in days                               |
+| **CLEANUP_ENABLED**         | No       | **true**      | Enable automatic cleanup of expired data                       |
+| **CLEANUP_ON_STARTUP**      | No       | **true**      | Run cleanup when server starts (in addition to scheduled runs) |
+| **CLEANUP_INTERVAL_HOURS**  | No       | **1**         | How often to run cleanup (in hours)                            |
+| **TRUST_PROXY_CLIENT_IP**   | No       | **false**     | Honor **X-Forwarded-For** when running behind a trusted proxy  |
+| **AUTH_USERNAME**           | No       | **-**         | Username required for login when authentication is enabled     |
+| **AUTH_PASSWORD**           | No       | **-**         | Password required for login when authentication is enabled     |
+| **SESSION_RESTORE_ENABLED** | No       | **true**      | Enable restoring previous sessions by friendly ID              |
+| **RAW_FULL_URL**            | No       | **false**     | Include full URL in raw request output                         |
+
+## Database Location
+
+- **Container:** `/config/http-inspector.sqlite` (default)
+- **Local development:** `./var/http-inspector.sqlite` (default)
+
+Set a custom path with the `DATABASE_PATH` environment variable.
+
+### Automatic Migrations
+
+Database schema migrations run automatically on server startup. No manual intervention is required.
+
+### Automatic Cleanup
+
+Expired data is automatically cleaned up based on TTL settings:
+- **Sessions:** Deleted after `SESSION_TTL_DAYS` of inactivity
+- **Tokens:** Deleted after `TOKEN_TTL_DAYS` since creation
+- **Requests:** Deleted after `REQUEST_TTL_DAYS` since creation
+
+Cleanup runs:
+- On startup (if `CLEANUP_ON_STARTUP=true`)
+- Every `CLEANUP_INTERVAL_HOURS` hours (default: 1 hour)
+
+Disable automatic cleanup by setting `CLEANUP_ENABLED=false`.
+
+### Manual Cleanup
+
+Run cleanup manually:
+
+```bash
+# Local development
+pnpm db:cleanup
+
+# In container
+docker exec http_inspector node /app/server/lib/cleanup.ts
+```
+
+### Database Management
+
+```bash
+# Generate a new migration (after schema changes)
+pnpm db:generate
+
+# Run migrations manually
+pnpm db:migrate
+
+# Open Drizzle Studio to inspect the database
+pnpm db:studio
+```
+
+### Backup & Restore
+
+SQLite makes backup simple - just copy the database file:
+
+```bash
+# Backup
+docker cp http_inspector:/config/http-inspector.sqlite ./backup-$(date +%Y%m%d).sqlite
+
+# Restore
+docker cp ./backup-20250106.sqlite http_inspector:/config/http-inspector.sqlite
+docker restart http_inspector
+```
 
 ## API Reference
 

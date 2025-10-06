@@ -1,4 +1,4 @@
-import { insertRequest, type Request } from './redis-db'
+import { insertRequest, type Request } from './db'
 import { useServerEvents } from './events'
 
 const selectFirstIp = (input?: string | null) => {
@@ -128,12 +128,12 @@ export function parseRawRequest(rawText: string): { method: string, url: string,
     // Parse the request line (e.g., "POST /api/test HTTP/1.1" or "GET http://example.com/api/test HTTP/1.1")
     const requestLine = lines[0]
     if (!requestLine) {
-        throw new Error('Invalid raw request: missing request line')
+        throw new Error('Invalid raw request: missing request line, possibly using LF instead of CRLF')
     }
 
     const requestLineParts = requestLine.match(/^(\S+)\s+(\S+)\s+HTTP\/[\d.]+$/)
     if (!requestLineParts) {
-        throw new Error('Invalid raw request: malformed request line')
+        throw new Error('Invalid raw request: malformed request line.')
     }
 
     const method = requestLineParts[1]

@@ -1,6 +1,6 @@
 import { defineEventHandler, createError, type H3Event, type EventHandlerRequest, setResponseHeader, getQuery } from 'h3'
-import { detectBinaryBody, extractContentType } from '~~/shared/content'
-import { getRequestFull, getToken } from '~~/server/lib/redis-db'
+import { extractContentType } from '~~/shared/content'
+import { getRequest, getRequestBody, getToken } from '~~/server/lib/db'
 import { getOrCreateSession } from '~~/server/lib/session'
 import { parseHeaders } from '~~/server/lib/utils'
 import { Readable } from 'stream'
@@ -28,8 +28,12 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     throw createError({ statusCode: 404, message: 'Token not found' })
   }
 
-  const row = await getRequestFull(sessionId, tokenId, id)
-  if (!row || !row.body) {
+  const row = await getRequest(sessionId, tokenId, id)
+  if (!row) {
+    throw createError({ statusCode: 404, message: 'Request not found' })
+  }
+
+  if (0 === row.contentLength) {
     throw createError({ statusCode: 404, message: 'Request body not found' })
   }
 
@@ -49,15 +53,18 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   }
 
   const filename = `r-${tokenId}-${id}-body.${ext}`
-  const isBinary = row.isBinary ?? detectBinaryBody(row.body ?? undefined, contentType)
+  const isBinary = row.isBinary ?? false
   const disposition = (isBinary || 'true' === query.download || '1' === query.download) ? 'attachment' : 'inline'
   setResponseHeader(event, 'Content-Disposition', `${disposition}; filename="${filename}"`)
 
-  const bodyBuffer = Buffer.from(row.body)
+  const body = await getRequestBody(sessionId, tokenId, id)
+  if (!body) {
+    throw createError({ statusCode: 404, message: 'Request body not found' })
+  }
 
   return new Promise<void>((resolve, reject) => {
     const res = event.node.res
-    const stream = Readable.from(bodyBuffer)
+    const stream = Readable.from(Buffer.from(body))
     stream.on('error', (streamErr) => reject(streamErr))
     stream.on('end', () => {
       res.end()

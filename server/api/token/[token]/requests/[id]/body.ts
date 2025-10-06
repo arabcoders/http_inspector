@@ -1,5 +1,5 @@
 import { defineEventHandler, createError, type H3Event, type EventHandlerRequest } from 'h3'
-import { getRequestFull, getToken } from '~~/server/lib/redis-db'
+import { getRequestFull, getToken } from '~~/server/lib/db'
 import { getOrCreateSession } from '~~/server/lib/session'
 import { detectBinaryBody, extractContentType } from '~~/shared/content'
 import { parseHeaders } from '~~/server/lib/utils'

@@ -34,17 +34,18 @@ const mockInsertRequest = vi.fn(async (
     url,
     body: body ? new Uint8Array(body) : null,
     contentType: headers['content-type'] || 'application/octet-stream',
+    contentLength: body ? body.length : 0,
     isBinary: false,
     clientIp,
     remoteIp,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(),
   }
 })
 
 const mockGetToken = vi.fn(async (_sessionId: string, tokenId: string): Promise<{
   id: string
   sessionId: string
-  createdAt: string
+  createdAt: Date
   responseEnabled: boolean
   responseStatus: number
   responseHeaders: null
@@ -52,14 +53,14 @@ const mockGetToken = vi.fn(async (_sessionId: string, tokenId: string): Promise<
 } | null> => ({
   id: tokenId,
   sessionId: 'test-session',
-  createdAt: new Date().toISOString(),
+  createdAt: new Date(),
   responseEnabled: false,
   responseStatus: 200,
   responseHeaders: null,
   responseBody: null,
 }))
 
-vi.mock('~~/server/lib/redis-db', () => ({
+vi.mock('~~/server/lib/db', () => ({
   getToken: mockGetToken,
   insertRequest: mockInsertRequest,
 }))
@@ -100,7 +101,7 @@ describe('POST /api/token/[token]/ingest', () => {
         id: 999,
         method: 'GET',
         url: '/api/test',
-        createdAt: expect.any(String),
+        createdAt: expect.any(Date),
       },
     })
 

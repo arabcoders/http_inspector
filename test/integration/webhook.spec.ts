@@ -29,17 +29,34 @@ const insertRequestMock = vi.fn(async (
     method,
     headers: JSON.stringify(headers || {}),
     url,
+    contentType: headers['content-type'] || 'application/octet-stream',
+    contentLength: _body ? _body.length : 0,
     remoteIp,
     clientIp,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(),
   }
 })
 
-vi.mock('~~/server/lib/redis-db', () => ({
-  getToken: vi.fn(async (id: string) => ({ id, responseEnabled: false, responseStatus: 200, responseHeaders: null, responseBody: null })),
+vi.mock('~~/server/lib/db', () => ({
+  getToken: vi.fn(async (sessionId: string, id: string) => ({ 
+    id, 
+    sessionId,
+    createdAt: new Date(),
+    responseEnabled: false, 
+    responseStatus: 200, 
+    responseHeaders: null, 
+    responseBody: null 
+  })),
   getSessionIdForToken: vi.fn(async () => 'session-123'),
   insertRequest: insertRequestMock,
-  listRequestsForToken: vi.fn(async (tokenId: string) => [{ id: 123, tokenId, method: 'POST', headers: '{}', url: `/api/${tokenId}`, createdAt: new Date() }]),
+  listRequestsForToken: vi.fn(async (tokenId: string) => [{ 
+    id: 123, 
+    tokenId, 
+    method: 'POST', 
+    headers: '{}', 
+    url: `/api/${tokenId}`, 
+    createdAt: new Date() 
+  }]),
 }))
 
 describe('integration: payload -> events -> db (handler-level)', () => {
@@ -64,6 +81,10 @@ describe('integration: payload -> events -> db (handler-level)', () => {
           method: 'POST',
           headers: { 'content-type': 'text/plain' },
           url: `/api/payload/${tokenId}`,
+        },
+        res: {
+          statusCode: 0,
+          end: () => {},
         },
       },
       context: { params: { token: tokenId } },

@@ -152,7 +152,7 @@
         </div>
       </div>
 
-      <section>
+      <section v-if="request.contentLength > 0">
         <UCard>
           <template #header>
             <button type="button" class="w-full flex items-center justify-between text-left" @click="toggleBody">
@@ -161,16 +161,14 @@
                   Body
                 </span>
                 <span class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ bodySummary }}
+                  {{ request.contentLength }} bytes
                 </span>
               </div>
               <div class="flex items-center gap-1">
                 <div class="flex justify-end">
-                  <UTooltip v-if="request" text="Download body">
+                  <UTooltip text="Download body">
                     <ULink role="button" variant="ghost" color="neutral" size="xs" target="_blank"
-                      :href="`/api/token/${tokenId}/requests/${request.id}/body/download`"
-                      :disabled="!request || (!isBinary && !bodyState)"
-                      >
+                      :href="`/api/token/${tokenId}/requests/${request.id}/body/download`">
                       <UIcon name="i-lucide-download" size="xs" class="h-4 w-4" />
                     </ULink>
                   </UTooltip>
@@ -197,7 +195,8 @@
                 class="flex h-40 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                 Select a request to view body.
               </div>
-              <CodeHighlight v-else :code="bodyState.content || 'No body attached to request'" :language="bodyState.language" />
+              <CodeHighlight v-else :code="bodyState.content || 'No body attached to request'"
+                :language="bodyState.language" />
             </div>
           </div>
         </UCard>
@@ -211,17 +210,7 @@ import { computed, watch, ref } from 'vue'
 import { copyText } from '~/utils'
 import { notify } from '~/composables/useNotificationBridge'
 import CodeHighlight from '~/components/CodeHighlight.vue'
-
-type RequestSummary = {
-  id: number
-  method: string
-  url: string
-  headers: string
-  clientIp?: string
-  remoteIp?: string
-  createdAt: string
-  isBinary?: boolean
-}
+import type { RequestSummary } from '~~/shared/types'
 
 type QueryParam = { key: string; value: string }
 type HeaderParam = { key: string; value: string }
@@ -233,9 +222,9 @@ type MethodBadgeProps = { color: BadgeColor, variant: BadgeVariant }
 
 const props = defineProps<{ request: RequestSummary | null, tokenId: string }>()
 
-const isOpen = usePersistedState('request-details-open', true)
-const bodyState = ref<BodyState | null>(null)
 const bodyLoading = ref(false)
+const bodyState = ref<BodyState | null>(null)
+const isOpen = usePersistedState('request-details-open', true)
 const isBodyOpen = usePersistedState('request-body-open', false)
 const isQueryOpen = usePersistedState('request-query-open', true)
 const isHeadersOpen = usePersistedState('request-headers-open', true)
@@ -247,26 +236,6 @@ const clientIp = computed(() => {
     return null
   }
   return props.request.remoteIp || props.request.clientIp || null
-})
-
-const bodySummary = computed(() => {
-  if (!props.request) {
-    return 'No request selected'
-  }
-
-  const headerLength = headers.value.find((header) => header.key.toLowerCase() === 'content-length')?.value
-  const parsedHeaderLength = headerLength ? Number(headerLength) : NaN
-
-  const loadedLength = typeof bodyState.value?.content === 'string' ? bodyState.value.content.length : 0
-
-  const effectiveLength = Number.isFinite(parsedHeaderLength) && parsedHeaderLength >= 0
-    ? parsedHeaderLength
-    : loadedLength
-
-  if (!effectiveLength) {
-    return '0 bytes'
-  }
-  return `${effectiveLength.toLocaleString()} bytes`
 })
 
 const queryParams = computed((): QueryParam[] => {

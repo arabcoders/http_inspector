@@ -1,5 +1,5 @@
 import { defineEventHandler, createError } from 'h3'
-import { getUserTokens, createToken, deleteAllTokens } from '~~/server/lib/redis-db'
+import { getUserTokens, createToken, deleteAllTokens } from '~~/server/lib/db'
 import { getOrCreateSession } from '~~/server/lib/session'
 import { useServerEvents } from '~~/server/lib/events'
 

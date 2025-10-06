@@ -9,7 +9,7 @@
  * are also published to their respective token channels.
  */
 
-import type { Request, Token } from './redis-db'
+import type { Request, Token } from './db'
 
 /**
  * Event type definitions for type-safe event publishing and subscription

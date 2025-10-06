@@ -1,7 +1,6 @@
 import { defineEventHandler, createError, type H3Event, type EventHandlerRequest, setResponseHeader, getQuery } from 'h3'
-import { getRequestFull, getToken } from '~~/server/lib/redis-db'
+import { getRequest, getRequestBody, getToken } from '~~/server/lib/db'
 import { getOrCreateSession } from '~~/server/lib/session'
-import { detectBinaryBody, extractContentType } from '~~/shared/content'
 import { parseHeaders, capitalizeHeader } from '~~/server/lib/utils'
 import { Readable } from 'stream'
 
@@ -27,15 +26,13 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     throw createError({ statusCode: 404, message: 'Token not found' })
   }
 
-  const row = await getRequestFull(sessionId, tokenId, id)
+  const row = await getRequest(sessionId, tokenId, id)
   if (!row) {
     throw createError({ statusCode: 404, message: 'Request not found' })
   }
 
   const headers = parseHeaders(row.headers as string)
-  const contentType = row.contentType ?? extractContentType(headers)
-  const bodyBuffer = row.body ? Buffer.from(row.body as Uint8Array) : null
-  const isBinary = row.isBinary ?? detectBinaryBody(bodyBuffer ?? undefined, contentType)
+  const isBinary = row.isBinary ?? false
 
   const url = row.url || '/'
   const method = row.method || 'GET'
@@ -69,20 +66,27 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
         return
       }
 
-      if (!bodyBuffer || bodyBuffer.length === 0) {
+      if (0 === row.contentLength) {
         res.end()
         resolve()
         return
       }
 
-      const stream = Readable.from(bodyBuffer)
+      getRequestBody(sessionId, tokenId, id).then(bodyData => {
+        if (!bodyData || 0 === bodyData.length) {
+          res.end()
+          resolve()
+          return
+        }
 
-      stream.on('error', streamErr => reject(streamErr))
-      stream.on('end', () => {
-        res.end()
-        resolve()
-      })
-      stream.pipe(res, { end: false })
+        const stream = Readable.from(Buffer.from(bodyData))
+        stream.on('error', streamErr => reject(streamErr))
+        stream.on('end', () => {
+          res.end()
+          resolve()
+        })
+        stream.pipe(res, { end: false })
+      }).catch(reject)
     })
   })
 })
