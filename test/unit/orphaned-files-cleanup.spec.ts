@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest'
 import { cleanupOrphanedFiles, cleanupExpiredData } from '../../server/lib/cleanup'
 import { useDatabase } from '../../server/lib/db'
 import { useFileStorage } from '../../server/lib/file-storage'
@@ -8,6 +8,7 @@ import { sql } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 import { mkdir } from 'fs/promises'
 import { join } from 'path'
+import { runMigrations } from '../../server/db/migrate'
 
 describe('Orphaned Files Cleanup', () => {
   const db = useDatabase()
@@ -16,6 +17,11 @@ describe('Orphaned Files Cleanup', () => {
 
   // Test data
   let testSessionId: string
+
+  beforeAll(async () => {
+    // Run migrations to create database tables
+    await runMigrations()
+  })
 
   beforeEach(async () => {
     // Clear database
