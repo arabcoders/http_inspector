@@ -2,11 +2,129 @@ import { getDb } from '../db'
 import { sessions, tokens, requests } from '../db/schema'
 import { lt, sql, isNotNull } from 'drizzle-orm'
 import { useFileStorage } from './file-storage'
+import { readdir, stat } from 'fs/promises'
+import { join } from 'path'
 
 // TTL values (in days)
 const SESSION_TTL_DAYS = 30
 const TOKEN_TTL_DAYS = 30
 const REQUEST_TTL_DAYS = 7
+
+/**
+ * Clean up orphaned files that are not referenced in the database
+ * 
+ * Scans the file storage directory and removes files that don't have
+ * corresponding database entries. This handles cases where:
+ * - Database cleanup failed to delete files
+ * - Manual database deletions were performed
+ * - File writes succeeded but database inserts failed
+ */
+export const cleanupOrphanedFiles = async () => {
+  const db = getDb()
+  const storage = useFileStorage()
+
+  console.debug('Starting orphaned files cleanup...')
+
+  const storageDir = storage.getStorageDir()
+  let deletedFiles = 0
+  let scannedFiles = 0
+
+  try {
+    // Get all sessions from the file system
+    const sessionDirs = await readdir(storageDir)
+
+    for (const sessionId of sessionDirs) {
+      const sessionPath = join(storageDir, sessionId)
+      const sessionStat = await stat(sessionPath)
+
+      if (false === sessionStat.isDirectory()) {
+        continue
+      }
+
+      // Check if session exists in database
+      const sessionExists = await db
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(sql`${sessions.id} = ${sessionId}`)
+        .limit(1)
+
+      if (0 === sessionExists.length) {
+        // Session doesn't exist in DB - delete entire session directory
+        console.debug(`Deleting orphaned session directory: ${sessionId}`)
+        await storage.deleteSession(sessionId)
+        continue
+      }
+
+      // Session exists, check tokens
+      const tokenDirs = await readdir(sessionPath)
+
+      for (const tokenId of tokenDirs) {
+        const tokenPath = join(sessionPath, tokenId)
+        const tokenStat = await stat(tokenPath)
+
+        if (false === tokenStat.isDirectory()) {
+          continue
+        }
+
+        // Check if token exists in database
+        const tokenExists = await db
+          .select({ id: tokens.id })
+          .from(tokens)
+          .where(sql`${tokens.id} = ${tokenId}`)
+          .limit(1)
+
+        if (0 === tokenExists.length) {
+          // Token doesn't exist in DB - delete entire token directory
+          console.debug(`Deleting orphaned token directory: ${sessionId}/${tokenId}`)
+          await storage.deleteToken(sessionId, tokenId)
+          continue
+        }
+
+        // Token exists, check individual request files
+        const requestFiles = await readdir(tokenPath)
+
+        for (const filename of requestFiles) {
+          scannedFiles++
+
+          // Extract request ID from filename (e.g., "uuid.bin" -> "uuid")
+          if (false === filename.endsWith('.bin')) {
+            continue
+          }
+
+          const requestId = filename.slice(0, -4) // Remove .bin extension
+          const relativePath = join(sessionId, tokenId, filename)
+
+          // Check if request exists in database
+          const requestExists = await db
+            .select({ id: requests.id })
+            .from(requests)
+            .where(sql`${requests.id} = ${requestId}`)
+            .limit(1)
+
+          if (0 === requestExists.length) {
+            // Request doesn't exist in DB - delete the file
+            console.debug(`Deleting orphaned request file: ${relativePath}`)
+            await storage.delete(relativePath)
+            deletedFiles++
+          }
+        }
+      }
+    }
+
+    console.debug(`Orphaned files cleanup complete: scanned ${scannedFiles} files, deleted ${deletedFiles} orphaned files`)
+
+    return {
+      scannedFiles,
+      deletedFiles,
+    }
+  } catch (error) {
+    console.error('[Cleanup] Error during orphaned files cleanup:', error)
+    return {
+      scannedFiles,
+      deletedFiles,
+    }
+  }
+}
 
 export const cleanupExpiredData = async () => {
   const db = getDb()
@@ -61,10 +179,15 @@ export const cleanupExpiredData = async () => {
 
   console.debug('Database cleanup complete')
 
+  // Clean up orphaned files
+  const orphanedResult = await cleanupOrphanedFiles()
+
   return {
     deletedRequests: deletedRequests.length,
     deletedTokens: deletedTokens.length,
     deletedSessions: deletedSessions.length,
+    orphanedFiles: orphanedResult.deletedFiles,
+    scannedFiles: orphanedResult.scannedFiles,
   }
 }
 

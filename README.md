@@ -4,7 +4,7 @@ HTTP Inspector is a self-hosted debugging console for capturing, inspecting, and
 
 ## Capabilities
 - Create disposable endpoints with session-scoped isolation
-- Capture every HTTP method with full headers, bodies, metadata, and binary payloads
+- Capture every HTTP method with full headers, bodies, metadata
 - Configure per-endpoint default responses: status codes, headers, and body templates
 - Stream live activity through Server-Sent Events for dashboards or automation
 - Restore previous sessions with friendly IDs for persistent debugging workflows
@@ -12,7 +12,7 @@ HTTP Inspector is a self-hosted debugging console for capturing, inspecting, and
 - Expire sessions, tokens, and stored requests automatically using configurable TTLs
 - Export or download raw requests for view/use in other tools.
 
-## Run with Containers
+## Running the container
 
 ### Docker/Podman `run`
 Both Docker and Podman work with the same flags; substitute `podman` for `docker` if you prefer Podman. The example below starts the inspector with a persistent volume for the SQLite database and publishes the UI on port 3001.
@@ -38,7 +38,7 @@ services:
     volumes:
       - http_inspector_data:/config
     environment:
-      - TRUST_PROXY_CLIENT_IP=false
+      - TRUST_PROXY_CLIENT_IP=false # Set to true if running behind a trusted proxy
 
 volumes:
   http_inspector_data:
@@ -73,61 +73,6 @@ The UI is available at http://localhost:3001 and the container persists until yo
 | **SESSION_RESTORE_ENABLED** | No       | **true**                  | Enable restoring previous sessions by friendly ID              |
 | **RAW_FULL_URL**            | No       | **false**                 | Include full URL in raw request output                         |
 
-### Automatic Migrations
-
-Database schema migrations run automatically on server startup. No manual intervention is required.
-
-### Automatic Cleanup
-
-Expired data is automatically cleaned up based on TTL settings:
-- **Sessions:** Deleted after `SESSION_TTL_DAYS` of inactivity
-- **Tokens:** Deleted after `TOKEN_TTL_DAYS` since creation
-- **Requests:** Deleted after `REQUEST_TTL_DAYS` since creation
-
-Cleanup runs:
-- On startup (if `CLEANUP_ON_STARTUP=true`)
-- Every `CLEANUP_INTERVAL_HOURS` hours (default: 1 hour)
-
-Disable automatic cleanup by setting `CLEANUP_ENABLED=false`.
-
-### Manual Cleanup
-
-Run cleanup manually:
-
-```bash
-# Local development
-pnpm db:cleanup
-
-# In container
-docker exec http_inspector node /app/server/lib/cleanup.ts
-```
-
-### Database Management
-
-```bash
-# Generate a new migration (after schema changes)
-pnpm db:generate
-
-# Run migrations manually
-pnpm db:migrate
-
-# Open Drizzle Studio to inspect the database
-pnpm db:studio
-```
-
-### Backup & Restore
-
-SQLite makes backup simple - just copy the database file:
-
-```bash
-# Backup
-docker cp http_inspector:/config/inspector.sqlite ./backup-$(date +%Y%m%d).sqlite
-
-# Restore
-docker cp ./backup-20250106.sqlite http_inspector:/config/inspector.sqlite
-docker restart http_inspector
-```
-
 ## API Reference
 
 Unless noted, endpoints require an authenticated session when authentication is enabled. Dates in examples use ISO 8601 format.
@@ -137,9 +82,10 @@ Unless noted, endpoints require an authenticated session when authentication is 
 #### GET /api/session
 Returns the active session.
 
+**Response:**
 ```json
 {
-  "id": "random-string",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "friendlyId": "famous-amethyst-panda",
   "createdAt": "2025-01-15T10:30:00.000Z",
   "lastAccessedAt": "2025-01-15T10:30:00.000Z"
@@ -147,7 +93,7 @@ Returns the active session.
 ```
 
 #### POST /api/session/restore
-Restore a prior session by friendly or technical ID.
+Restore a prior session by its friendly ID.
 
 ```json
 {
@@ -162,62 +108,58 @@ Restore a prior session by friendly or technical ID.
 #### GET /api/token
 List tokens for the current session.
 
+**Response:**
 ```json
 [
   {
-    "id": "abc123",
+    "id": "550e8400-e29b-41d4-a716-446655440000",
     "createdAt": "2025-01-15T10:30:00.000Z",
-    "requestCount": 5,
-    "defaultStatusCode": 200,
-    "defaultHeaders": {},
-    "defaultBody": ""
+    "_count": {
+      "requests": 5
+    }
   }
 ]
 ```
 
 #### POST /api/token
-Create a token; optional `customId` makes the endpoint URL predictable.
-
-```json
-{
-  "customId": "optional-custom-id"
-}
-```
+Create a new token.
 
 **Response:**
 ```json
 {
-  "id": "abc123",
-  "createdAt": "2025-01-15T10:30:00.000Z",
-  "defaultStatusCode": 200
+  "id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
 #### GET /api/token/{tokenId}
 Retrieve token configuration.
 
+**Response:**
 ```json
 {
-  "id": "abc123",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "createdAt": "2025-01-15T10:30:00.000Z",
-  "defaultStatusCode": 200,
-  "defaultHeaders": {
+  "responseEnabled": true,
+  "responseStatus": 200,
+  "responseHeaders": {
     "Content-Type": "application/json"
   },
-  "defaultBody": "{\"status\": \"ok\"}"
+  "responseBody": "{\"status\": \"ok\"}"
 }
 ```
 
 #### PATCH /api/token/{tokenId}
-Update default response attributes.
+Update token response configuration.
 
+**Request Body:**
 ```json
 {
-  "defaultStatusCode": 204,
-  "defaultHeaders": {
+  "enabled": true,
+  "status": 204,
+  "headers": {
     "X-Request-Signature": "abc123"
   },
-  "defaultBody": "{\"processed\": true}"
+  "body": "{\"processed\": true}"
 }
 ```
 
@@ -233,21 +175,23 @@ Delete a token and its stored requests.
 #### GET /api/token/{tokenId}/requests
 List requests captured for a token.
 
+**Response:**
 ```json
 [
   {
-    "id": 1,
+    "id": "650e8400-e29b-41d4-a716-446655440000",
+    "tokenId": "550e8400-e29b-41d4-a716-446655440000",
+    "sessionId": "450e8400-e29b-41d4-a716-446655440000",
     "method": "POST",
-    "path": "/api/payload/abc123",
-    "query": "?status=success",
-    "headers": {
-      "content-type": "application/json",
-      "user-agent": "curl/7.79.1"
-    },
-    "ip": "192.168.1.100",
-    "timestamp": "2025-01-15T10:30:00.000Z",
-    "bodySize": 45,
-    "isBinary": false
+    "url": "/api/payload/550e8400-e29b-41d4-a716-446655440000?status=success",
+    "headers": "{\"content-type\":\"application/json\",\"user-agent\":\"curl/7.79.1\"}",
+    "contentType": "application/json",
+    "contentLength": 45,
+    "isBinary": false,
+    "clientIp": "192.168.1.100",
+    "remoteIp": "203.0.113.1",
+    "bodyPath": "450e8400-e29b-41d4-a716-446655440000/550e8400-e29b-41d4-a716-446655440000/1.bin",
+    "createdAt": "2025-01-15T10:30:00.000Z"
   }
 ]
 ```
@@ -255,19 +199,22 @@ List requests captured for a token.
 #### GET /api/token/{tokenId}/requests/{requestId}
 Fetch metadata for a specific request.
 
+**Response:**
 ```json
 {
-  "id": 1,
+  "id": "650e8400-e29b-41d4-a716-446655440000",
+  "tokenId": "550e8400-e29b-41d4-a716-446655440000",
+  "sessionId": "450e8400-e29b-41d4-a716-446655440000",
   "method": "POST",
-  "path": "/api/payload/abc123",
-  "query": "?status=success",
-  "headers": {
-    "content-type": "application/json"
-  },
-  "ip": "192.168.1.100",
-  "timestamp": "2025-01-15T10:30:00.000Z",
-  "bodySize": 45,
-  "isBinary": false
+  "url": "/api/payload/550e8400-e29b-41d4-a716-446655440000?status=success",
+  "headers": "{\"content-type\":\"application/json\"}",
+  "contentType": "application/json",
+  "contentLength": 45,
+  "isBinary": false,
+  "clientIp": "192.168.1.100",
+  "remoteIp": "203.0.113.1",
+  "bodyPath": "450e8400-e29b-41d4-a716-446655440000/550e8400-e29b-41d4-a716-446655440000/1.bin",
+  "createdAt": "2025-01-15T10:30:00.000Z"
 }
 ```
 
@@ -317,7 +264,7 @@ Manually ingest a raw HTTP request into the system.
 {
   "ok": true,
   "request": {
-    "id": 42,
+    "id": "650e8400-e29b-41d4-a716-446655440000",
     "method": "POST",
     "url": "/api/webhook",
     "createdAt": "2025-01-15T10:30:00.000Z"
@@ -394,21 +341,24 @@ eventSource.onmessage = (event) => {
 ```
 
 Events include:
-- `token:created`
-- `token:updated`
-- `token:deleted`
-- `request:new`
+- `request.received`
+- `request.deleted`
+- `request.cleared`
+- `token.created`
+- `token.deleted`
+- `token.cleared`
+- `token.response.updated`
 
 Event payload example:
 
 ```json
 {
-  "type": "request:new",
-  "token": "abc123",
+  "type": "request.received",
+  "token": "550e8400-e29b-41d4-a716-446655440000",
   "request": {
-    "id": 1,
+    "id": "650e8400-e29b-41d4-a716-446655440000",
     "method": "POST",
-    "timestamp": "2025-01-15T10:30:00.000Z"
+    "createdAt": "2025-01-15T10:30:00.000Z"
   }
 }
 ```

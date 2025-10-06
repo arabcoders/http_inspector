@@ -17,6 +17,7 @@ FROM node:20-bullseye-slim
 WORKDIR /app
 
 COPY --from=base /app/.output /app
+COPY migrations/ /app/migrations
 COPY README.md /app
 
 ENV NODE_ENV=production

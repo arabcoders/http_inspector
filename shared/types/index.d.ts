@@ -13,7 +13,6 @@ export interface Session {
  */
 export interface Token {
     id: string // UUID - primary key, used for all operations
-    token: string // DEPRECATED: 8-char display string, kept for data compatibility
     sessionId: string // References session.id (UUID)
     createdAt: Date
     responseEnabled: boolean
@@ -81,7 +80,7 @@ export type TokenWithCount = Token & { _count?: { requests: number } }
 /**
  * Token list item for frontend display (serialized dates)
  */
-export type TokenListItem = Pick<Token, 'id' | 'token'> & {
+export type TokenListItem = Pick<Token, 'id'> & {
     createdAt?: string
     _count?: { requests: number }
 }
@@ -161,10 +160,10 @@ export interface ServerEventMap {
     'request.received': { token: string; request: Request }
     'request.deleted': { token: string; requestId: string }
     'request.cleared': { token: string }
-    'token.created': { token: Pick<Token, 'id' | 'token' | 'createdAt'> }
-    'token.deleted': { token: { id: string; token: string } }
+    'token.created': { token: Pick<Token, 'id' | 'createdAt'> }
+    'token.deleted': { token: { id: string } }
     'token.cleared': Record<string, never>
-    'token.response.updated': { token: { id: string; token: string; responseEnabled: boolean; responseStatus: number } }
+    'token.response.updated': { token: { id: string; responseEnabled: boolean; responseStatus: number } }
 }
 
 /**

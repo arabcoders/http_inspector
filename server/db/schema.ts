@@ -13,7 +13,6 @@ export const sessions = sqliteTable('sessions', {
 
 export const tokens = sqliteTable('tokens', {
     id: text('id').primaryKey(), // UUID - primary key used for all operations
-    token: text('token').notNull().unique(), // DEPRECATED: 8-char display string, kept for data compatibility
     sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     responseEnabled: integer('response_enabled', { mode: 'boolean' }).notNull().default(false),

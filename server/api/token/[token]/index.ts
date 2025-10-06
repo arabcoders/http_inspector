@@ -25,7 +25,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
 
   if ('DELETE' === method) {
     await db.tokens._delete(sessionId, tokenId)
-    events.publish(sessionId, 'token.deleted', { token: { id: token.id, token: token.token } })
+    events.publish(sessionId, 'token.deleted', { token: { id: token.id } })
     return { ok: true }
   }
 
@@ -47,7 +47,6 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     events.publish(sessionId, 'token.response.updated', {
       token: {
         id: token.id,
-        token: token.token,
         responseEnabled: enabled,
         responseStatus: status
       }

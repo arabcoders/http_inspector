@@ -2,11 +2,8 @@ import { getDb } from '../db/index'
 import { tokens as tokensSchema, requests as requestsSchema } from '../db/schema'
 import type { Token, Request, TokenWithCount } from '~~/shared/types'
 import { eq, desc, sql } from 'drizzle-orm'
-import { customAlphabet } from 'nanoid'
 import { useFileStorage } from './file-storage'
 import { randomUUID } from 'crypto'
-
-const tokenGenerator = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8)
 
 const detectBinary = (buffer: Buffer, contentType: string): boolean => {
   if (contentType) {
@@ -46,12 +43,10 @@ export const useDatabase = () => {
      */
     create: async (sessionId: string): Promise<Token> => {
       const id = randomUUID()
-      const token = tokenGenerator()
       const now = new Date()
 
       const tokenData: typeof tokensSchema.$inferInsert = {
         id,
-        token,
         sessionId,
         createdAt: now,
         responseEnabled: false,
@@ -64,7 +59,6 @@ export const useDatabase = () => {
 
       return {
         id,
-        token,
         sessionId,
         createdAt: now,
         responseEnabled: false,
@@ -94,7 +88,6 @@ export const useDatabase = () => {
       const result = await db
         .select({
           id: tokensSchema.id,
-          token: tokensSchema.token,
           sessionId: tokensSchema.sessionId,
           createdAt: tokensSchema.createdAt,
           responseEnabled: tokensSchema.responseEnabled,
@@ -111,7 +104,6 @@ export const useDatabase = () => {
 
       return result.map(row => ({
         id: row.id,
-        token: row.token,
         sessionId: row.sessionId,
         createdAt: row.createdAt,
         responseEnabled: row.responseEnabled,
@@ -359,8 +351,5 @@ export const useDatabase = () => {
     },
   }
 
-  return {
-    tokens,
-    requests,
-  }
+  return { tokens, requests }
 }

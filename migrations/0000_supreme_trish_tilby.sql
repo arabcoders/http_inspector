@@ -38,7 +38,6 @@ CREATE INDEX `friendly_id_idx` ON `sessions` (`friendly_id`);--> statement-break
 CREATE INDEX `last_accessed_idx` ON `sessions` (`last_accessed_at`);--> statement-breakpoint
 CREATE TABLE `tokens` (
 	`id` text PRIMARY KEY NOT NULL,
-	`token` text NOT NULL,
 	`session_id` text NOT NULL,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	`response_enabled` integer DEFAULT false NOT NULL,
@@ -48,7 +47,6 @@ CREATE TABLE `tokens` (
 	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `tokens_token_unique` ON `tokens` (`token`);--> statement-breakpoint
-CREATE INDEX `token_token_idx` ON `tokens` (`token`);--> statement-breakpoint
+CREATE INDEX `token_id_idx` ON `tokens` (`id`);--> statement-breakpoint
 CREATE INDEX `token_session_idx` ON `tokens` (`session_id`);--> statement-breakpoint
 CREATE INDEX `token_created_idx` ON `tokens` (`created_at`);

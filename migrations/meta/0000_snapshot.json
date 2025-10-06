@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "55e2b032-53c3-48dd-a20e-855dab9d842d",
+  "id": "d6954059-16bb-41b0-a65c-8051dde59a8e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "key_value_store": {
@@ -267,13 +267,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "token": {
-          "name": "token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "session_id": {
           "name": "session_id",
           "type": "text",
@@ -321,17 +314,10 @@
         }
       },
       "indexes": {
-        "tokens_token_unique": {
-          "name": "tokens_token_unique",
+        "token_id_idx": {
+          "name": "token_id_idx",
           "columns": [
-            "token"
-          ],
-          "isUnique": true
-        },
-        "token_token_idx": {
-          "name": "token_token_idx",
-          "columns": [
-            "token"
+            "id"
           ],
           "isUnique": false
         },

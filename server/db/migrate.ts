@@ -6,7 +6,7 @@ import { join } from 'path'
 export async function runMigrations(): Promise<void> {
   const storagePath = process.env.STORAGE_PATH || process.cwd() + '/var'
   const dbPath = join(storagePath, 'inspector.sqlite')
-  const migrationsPath = join(process.cwd(), 'server', 'db', 'migrations')
+  const migrationsPath = join(process.cwd(), 'migrations')
 
   console.debug('Running migrations...')
   console.debug('Database:', dbPath)
