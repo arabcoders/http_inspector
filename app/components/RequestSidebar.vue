@@ -95,20 +95,12 @@
 </template>
 
 <script setup lang="ts">
+import type { RequestSummary } from '~~/shared/types'
 
 defineEmits<{
   (e: 'select' | 'delete', id: number): void
   (e: 'copy-url' | 'clear' | 'close' | 'ingest'): void
 }>()
-
-type RequestSummary = {
-  id: number
-  method: string
-  clientIp?: string
-  remoteIp?: string
-  createdAt: string
-  isBinary?: boolean
-}
 
 defineProps<{
   requests: Array<RequestSummary>

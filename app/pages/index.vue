@@ -47,8 +47,7 @@ import { useSSE, type SSEEventPayload } from '~/composables/useSSE'
 import { useTokens } from '~/composables/useTokens'
 import { copyText } from '~/utils'
 import { notify } from '~/composables/useNotificationBridge'
-
-type Token = { id: string; createdAt?: string; _count?: { requests?: number } }
+import type { TokenListItem } from '~~/shared/types'
 
 const { tokens, loadTokens, createToken, clearTokens } = useTokens()
 
@@ -63,7 +62,7 @@ const isSidebarOpen = ref(false)
 const openSidebar = () => isSidebarOpen.value = true
 const closeSidebar = () => isSidebarOpen.value = false
 
-const sortedTokens = computed(() => (tokens.value || []).slice().sort((a: Token, b: Token) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()))
+const sortedTokens = computed(() => (tokens.value || []).slice().sort((a: TokenListItem, b: TokenListItem) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()))
 const create = async () => await createToken()
 
 const confirmDeleteAll = async () => {
@@ -142,7 +141,7 @@ const handleClientEvent = (payload: SSEEventPayload) => {
         return
       }
 
-      const token = (tokens.value as Token[] | undefined)?.find(t => t.id === tokenId)
+      const token = (tokens.value as TokenListItem[] | undefined)?.find(t => t.id === tokenId)
       const currentCount = requestCounts.value.get(tokenId) ?? (token?._count?.requests ?? 0)
       requestCounts.value.set(tokenId, currentCount + 1)
 
@@ -202,8 +201,8 @@ onMounted(async () => {
 
   readmeContent.value = await marked.parse(await $fetch<string>('/api/readme'))
 
-  const tokenList = tokens.value as Token[] | undefined
-  tokenList?.forEach((token: Token) => {
+  const tokenList = tokens.value as TokenListItem[] | undefined
+  tokenList?.forEach((token: TokenListItem) => {
     if (token._count?.requests !== undefined) {
       requestCounts.value.set(token.id, token._count.requests)
     }

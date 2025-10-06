@@ -51,12 +51,14 @@ export const keyValueStore = sqliteTable('key_value_store', {
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 })
 
-// Type exports for use in the application
-export type Session = typeof sessions.$inferSelect
-export type InsertSession = typeof sessions.$inferInsert
-export type Token = typeof tokens.$inferSelect
-export type InsertToken = typeof tokens.$inferInsert
-export type Request = typeof requests.$inferSelect
-export type InsertRequest = typeof requests.$inferInsert
-export type KeyValue = typeof keyValueStore.$inferSelect
-export type InsertKeyValue = typeof keyValueStore.$inferInsert
+// Re-export types from shared for consistency
+export type {
+    Session,
+    InsertSession,
+    Token,
+    InsertToken,
+    Request,
+    InsertRequest,
+    KeyValue,
+    InsertKeyValue
+} from '~~/shared/types'

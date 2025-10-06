@@ -9,36 +9,15 @@
  * are also published to their respective token channels.
  */
 
-import type { Request, Token } from './db'
+import type {
+    ServerEventMap,
+    ServerEventType,
+    ServerEventPayload,
+    Subscriber,
+    ChannelType
+} from '~~/shared/types'
 
-/**
- * Event type definitions for type-safe event publishing and subscription
- */
-export interface ServerEventMap {
-  'request.received': { token: string; request: Request }
-  'request.deleted': { token: string; requestId: number }
-  'request.cleared': { token: string }
-  'token.created': { token: Pick<Token, 'id' | 'createdAt'> }
-  'token.deleted': { token: { id: string } }
-  'token.cleared': Record<string, never>
-  'token.response.updated': { token: { id: string; responseEnabled: boolean; responseStatus: number } }
-}
-
-export type ServerEventType = keyof ServerEventMap
-export type ServerEventPayload<T extends ServerEventType> = ServerEventMap[T]
-
-/**
- * Subscriber interface for SSE connections
- */
-export interface Subscriber {
-  id: string
-  send: (data: string) => void
-}
-
-/**
- * Event channel types
- */
-export type ChannelType = 'session' | 'token'
+export type { ServerEventMap, ServerEventType, ServerEventPayload, Subscriber, ChannelType }
 
 /**
  * Internal subscriber storage

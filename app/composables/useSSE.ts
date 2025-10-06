@@ -1,55 +1,24 @@
 import { ref, readonly, computed } from 'vue'
 import type { Ref } from 'vue'
+import type {
+    SSEConnectionStatus,
+    SSEEventPayload,
+    SSEEventMap,
+    SSEEventType,
+    SSEEventListener,
+    SSEGenericEventListener,
+    SSEStatusListener
+} from '~~/shared/types'
 
-export type SSEConnectionStatus = 'connected' | 'connecting' | 'disconnected'
-
-export interface SSEEventPayload {
-    type: string
-    [key: string]: unknown
+export type {
+    SSEConnectionStatus,
+    SSEEventPayload,
+    SSEEventMap,
+    SSEEventType,
+    SSEEventListener,
+    SSEGenericEventListener,
+    SSEStatusListener
 }
-
-export interface SSEEventMap {
-    'request.received': {
-        type: 'request.received'
-        token: string
-        request: Record<string, unknown>
-        requestId: number
-    }
-    'request.deleted': {
-        type: 'request.deleted'
-        token: string
-        requestId: number
-    }
-    'request.cleared': {
-        type: 'request.cleared'
-        token: string
-    }
-    'token.created': {
-        type: 'token.created'
-        token: string
-    }
-    'token.deleted': {
-        type: 'token.deleted'
-        token: string
-    }
-}
-
-export type SSEEventType = keyof SSEEventMap
-
-/**
- * Generic event listener that receives the full payload.
- */
-export type SSEEventListener<T extends SSEEventType = SSEEventType> = (payload: SSEEventMap[T]) => void
-
-/**
- * Generic event listener that receives any event payload.
- */
-export type SSEGenericEventListener = (payload: SSEEventPayload) => void
-
-/**
- * Connection status change listener
- */
-export type SSEStatusListener = (status: SSEConnectionStatus) => void
 
 let eventSource: EventSource | null = null
 let reconnectAttempts = 0

@@ -75,15 +75,10 @@
 
 <script setup lang="ts">
 import { formatDate } from '~/utils'
-
-type Token = {
-    id: string
-    createdAt?: string
-    _count?: { requests?: number }
-}
+import type { TokenListItem } from '~~/shared/types'
 
 const props = defineProps<{
-    tokens: Array<Token>
+    tokens: Array<TokenListItem>
     requestCounts?: Map<string, number>
     isOpen?: boolean
     showMobileClose?: boolean
@@ -95,7 +90,7 @@ defineEmits<{
     (e: 'delete' | 'copy-url', id: string): void
 }>()
 
-const getRequestCount = (token: Token): string => {
+const getRequestCount = (token: TokenListItem): string => {
     try {
         if (!token?.id) {
             return '0'

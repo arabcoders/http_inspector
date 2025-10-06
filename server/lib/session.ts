@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../db'
-import { sessions, type Session } from '../db/schema'
+import { sessions } from '../db/schema'
+import type { Session } from '~~/shared/types'
 import type { H3Event } from 'h3'
 import { getCookie, setCookie } from 'h3'
 import { generateUniqueFriendlyId, isValidFriendlyId } from './friendly-id'

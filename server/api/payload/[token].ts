@@ -1,5 +1,6 @@
 import { readRawBody, defineEventHandler, type H3Event, type EventHandlerRequest } from 'h3'
-import { getToken, getSessionIdForToken, type Token } from '~~/server/lib/db'
+import { getToken, getSessionIdForToken } from '~~/server/lib/db'
+import type { Token } from '~~/shared/types'
 import { ingestRequest } from '~~/server/lib/request-ingestion'
 
 const CORS_HEADERS: Record<string, string> = {

@@ -1,4 +1,5 @@
-import { insertRequest, type Request } from './db'
+import { insertRequest } from './db'
+import type { Request } from '~~/shared/types'
 import { useServerEvents } from './events'
 
 const selectFirstIp = (input?: string | null) => {

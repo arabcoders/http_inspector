@@ -1,12 +1,12 @@
 import { getDb } from '../db/index'
-import { tokens, requests, type Token, type Request } from '../db/schema'
+import { tokens, requests } from '../db/schema'
+import type { Token, Request, TokenWithCount } from '~~/shared/types'
 import { eq, desc, sql } from 'drizzle-orm'
 import { customAlphabet } from 'nanoid'
 
 const tokenIdGenerator = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8)
 
-export type TokenWithCount = Token & { _count?: { requests: number } }
-export type { Token, Request }
+export type { Token, Request, TokenWithCount }
 
 export const createToken = async (sessionId: string): Promise<Token> => {
   const db = getDb()
