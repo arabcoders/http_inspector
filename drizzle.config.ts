@@ -5,6 +5,6 @@ export default defineConfig({
     out: './server/db/migrations',
     dialect: 'sqlite',
     dbCredentials: {
-        url: process.env.DATABASE_PATH || './var/http-inspector.sqlite',
+        url: process.env.STORAGE_PATH || './var/inspector.sqlite',
     },
 })

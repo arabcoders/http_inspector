@@ -10,7 +10,8 @@ export const getDb = () => {
         return _db
     }
 
-    const dbPath = process.env.DATABASE_PATH || join(process.cwd(), 'var', 'http-inspector.sqlite')
+    const storagePath = process.env.STORAGE_PATH || process.cwd() + '/var'
+    const dbPath = join(storagePath, 'inspector.sqlite')
     const sqlite = new Database(dbPath)
 
     sqlite.pragma('journal_mode = WAL')

@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, blob, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
 
 export const sessions = sqliteTable('sessions', {
@@ -31,7 +31,6 @@ export const requests = sqliteTable('requests', {
     method: text('method').notNull(),
     url: text('url').notNull(),
     headers: text('headers').notNull(), // JSON string
-    body: blob('body', { mode: 'buffer' }),
     contentType: text('content_type').notNull(),
     contentLength: integer('content_length').notNull().default(0),
     isBinary: integer('is_binary', { mode: 'boolean' }).notNull(),
@@ -42,6 +41,14 @@ export const requests = sqliteTable('requests', {
     index('request_token_idx').on(table.tokenId),
     index('request_session_idx').on(table.sessionId),
     index('request_created_idx').on(table.createdAt), // For cleanup based on TTL
+])
+
+export const requestBodies = sqliteTable('request_bodies', {
+    requestId: integer('request_id').primaryKey().references(() => requests.id, { onDelete: 'cascade' }),
+    filePath: text('file_path').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (table) => [
+    index('request_body_created_idx').on(table.createdAt),
 ])
 
 export const keyValueStore = sqliteTable('key_value_store', {

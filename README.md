@@ -58,27 +58,20 @@ The UI is available at http://localhost:3001 and the container persists until yo
 
 ## Environment Variables
 
-| Variable                    | Required | Default       | Description                                                    |
-| --------------------------- | -------- | ------------- | -------------------------------------------------------------- |
-| **DATABASE_PATH**           | No       | **automated** | Path to SQLite database file                                   |
-| **SESSION_TTL_DAYS**        | No       | **30**        | Session lifetime in days before automatic cleanup              |
-| **TOKEN_TTL_DAYS**          | No       | **30**        | Token lifetime in days before automatic cleanup                |
-| **REQUEST_TTL_DAYS**        | No       | **7**         | Request history lifetime in days                               |
-| **CLEANUP_ENABLED**         | No       | **true**      | Enable automatic cleanup of expired data                       |
-| **CLEANUP_ON_STARTUP**      | No       | **true**      | Run cleanup when server starts (in addition to scheduled runs) |
-| **CLEANUP_INTERVAL_HOURS**  | No       | **1**         | How often to run cleanup (in hours)                            |
-| **TRUST_PROXY_CLIENT_IP**   | No       | **false**     | Honor **X-Forwarded-For** when running behind a trusted proxy  |
-| **AUTH_USERNAME**           | No       | **-**         | Username required for login when authentication is enabled     |
-| **AUTH_PASSWORD**           | No       | **-**         | Password required for login when authentication is enabled     |
-| **SESSION_RESTORE_ENABLED** | No       | **true**      | Enable restoring previous sessions by friendly ID              |
-| **RAW_FULL_URL**            | No       | **false**     | Include full URL in raw request output                         |
-
-## Database Location
-
-- **Container:** `/config/http-inspector.sqlite` (default)
-- **Local development:** `./var/http-inspector.sqlite` (default)
-
-Set a custom path with the `DATABASE_PATH` environment variable.
+| Variable                    | Required | Default                   | Description                                                    |
+| --------------------------- | -------- | ------------------------- | -------------------------------------------------------------- |
+| **STORAGE_PATH**            | No       | **/config** or **./var)** | Path for storing db and request bodies                         |
+| **SESSION_TTL_DAYS**        | No       | **30**                    | Session lifetime in days before automatic cleanup              |
+| **TOKEN_TTL_DAYS**          | No       | **30**                    | Token lifetime in days before automatic cleanup                |
+| **REQUEST_TTL_DAYS**        | No       | **7**                     | Request history lifetime in days                               |
+| **CLEANUP_ENABLED**         | No       | **true**                  | Enable automatic cleanup of expired data                       |
+| **CLEANUP_ON_STARTUP**      | No       | **true**                  | Run cleanup when server starts (in addition to scheduled runs) |
+| **CLEANUP_INTERVAL_HOURS**  | No       | **1**                     | How often to run cleanup (in hours)                            |
+| **TRUST_PROXY_CLIENT_IP**   | No       | **false**                 | Honor **X-Forwarded-For** when running behind a trusted proxy  |
+| **AUTH_USERNAME**           | No       | **-**                     | Username required for login when authentication is enabled     |
+| **AUTH_PASSWORD**           | No       | **-**                     | Password required for login when authentication is enabled     |
+| **SESSION_RESTORE_ENABLED** | No       | **true**                  | Enable restoring previous sessions by friendly ID              |
+| **RAW_FULL_URL**            | No       | **false**                 | Include full URL in raw request output                         |
 
 ### Automatic Migrations
 
@@ -128,10 +121,10 @@ SQLite makes backup simple - just copy the database file:
 
 ```bash
 # Backup
-docker cp http_inspector:/config/http-inspector.sqlite ./backup-$(date +%Y%m%d).sqlite
+docker cp http_inspector:/config/inspector.sqlite ./backup-$(date +%Y%m%d).sqlite
 
 # Restore
-docker cp ./backup-20250106.sqlite http_inspector:/config/http-inspector.sqlite
+docker cp ./backup-20250106.sqlite http_inspector:/config/inspector.sqlite
 docker restart http_inspector
 ```
 

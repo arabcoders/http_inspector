@@ -1,5 +1,5 @@
 import { readRawBody, defineEventHandler, type H3Event, type EventHandlerRequest } from 'h3'
-import { getToken, getSessionIdForToken } from '~~/server/lib/db'
+import { useDatabase } from '~~/server/lib/db'
 import type { Token } from '~~/shared/types'
 import { ingestRequest } from '~~/server/lib/request-ingestion'
 
@@ -45,6 +45,8 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const ctx = (event.context as unknown as EventContextParams) || {}
   const params = ctx.params || {}
   const token = params.token as string | undefined
+  const db = useDatabase()
+  
   if (!token) {
     event.node.res.statusCode = 404
     event.node.res.end('not found')
@@ -71,7 +73,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     return
   }
 
-  const sessionId = await getSessionIdForToken(token)
+  const sessionId = await db.tokens.getSessionId(token)
 
   if (!sessionId) {
     event.node.res.statusCode = 404
@@ -79,7 +81,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     return
   }
 
-  const tokenRow = await getToken(sessionId, token)
+  const tokenRow = await db.tokens.get(sessionId, token)
 
   if (!tokenRow) {
     event.node.res.statusCode = 404

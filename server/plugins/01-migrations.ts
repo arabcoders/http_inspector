@@ -1,4 +1,5 @@
 import { runMigrations } from '../db/migrate'
+import { useFileStorage } from '../lib/file-storage'
 
 /**
  * Nitro plugin that runs database migrations on server startup
@@ -9,6 +10,10 @@ export default defineNitroPlugin(async () => {
     console.log('[Migrations] Running database migrations...')
     await runMigrations()
     console.log('[Migrations] Database migrations completed successfully')
+    
+    console.log('[Storage] Ensuring storage directory exists...')
+    await useFileStorage().ensureStorageDir()
+    console.log('[Storage] Storage directory ready')
   } catch (error) {
     console.error('[Migrations] Failed to run database migrations:', error)
     // Don't throw - allow server to start even if migrations fail

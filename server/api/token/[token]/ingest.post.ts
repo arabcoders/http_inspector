@@ -1,5 +1,5 @@
 import { defineEventHandler, readBody, createError, type H3Event, type EventHandlerRequest } from 'h3'
-import { getToken } from '~~/server/lib/db'
+import { useDatabase } from '~~/server/lib/db'
 import { getOrCreateSession } from '~~/server/lib/session'
 import { ingestRequest, parseRawRequest } from '~~/server/lib/request-ingestion'
 
@@ -9,12 +9,13 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     const ctx = (event.context as unknown as EventParams) || {}
     const params = ctx.params || {}
     const tokenId = params.token
+    const db = useDatabase()
 
     if (!tokenId) {
         throw createError({ statusCode: 400, message: 'Token ID is required' })
     }
 
-    const token = await getToken(sessionId, tokenId)
+    const token = await db.tokens.get(sessionId, tokenId)
     if (!token) {
         throw createError({ statusCode: 404, message: 'Token not found' })
     }

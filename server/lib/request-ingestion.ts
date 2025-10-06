@@ -1,4 +1,4 @@
-import { insertRequest } from './db'
+import { useDatabase } from './db'
 import type { Request } from '~~/shared/types'
 import { useServerEvents } from './events'
 
@@ -88,11 +88,12 @@ export async function ingestRequest(
     overrideRemoteIp?: string | null
 ): Promise<Request> {
     const trustProxy = 'true' === process.env.TRUST_PROXY_CLIENT_IP
+    const db = useDatabase()
 
     const clientIp = overrideClientIp || fallbackClientIp
     const remoteIp = overrideRemoteIp || (trustProxy ? determineClientIp(headers) : null) || clientIp
 
-    const created = await insertRequest(
+    const created = await db.requests.create(
         sessionId,
         tokenId,
         method,

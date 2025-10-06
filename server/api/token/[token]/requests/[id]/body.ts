@@ -1,5 +1,5 @@
 import { defineEventHandler, createError, type H3Event, type EventHandlerRequest } from 'h3'
-import { getRequestFull, getToken } from '~~/server/lib/db'
+import { useDatabase } from '~~/server/lib/db'
 import { getOrCreateSession } from '~~/server/lib/session'
 import { detectBinaryBody, extractContentType } from '~~/shared/content'
 import { parseHeaders } from '~~/server/lib/utils'
@@ -11,6 +11,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const params = ctx.params || {}
   const id = Number(params.id)
   const tokenId = params.token
+  const db = useDatabase()
 
   if (!tokenId) {
     throw createError({ statusCode: 400, message: 'Token ID is required' })
@@ -20,19 +21,22 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     throw createError({ statusCode: 400, message: 'Invalid request ID' })
   }
 
-  const token = await getToken(sessionId, tokenId)
+  const token = await db.tokens.get(sessionId, tokenId)
   if (!token) {
     throw createError({ statusCode: 404, message: 'Token not found' })
   }
 
-  const row = await getRequestFull(sessionId, tokenId, id)
+  const row = await db.requests.get(sessionId, tokenId, id)
   if (!row) {
     throw createError({ statusCode: 404, message: 'Request not found' })
   }
 
   const headers = parseHeaders(row.headers ?? null)
   const headerContentType = row.contentType ?? extractContentType(headers)
-  const bodyBuffer = row.body ? Buffer.from(row.body) : null
+  
+  // Fetch body separately
+  const bodyData = await db.requests.getBody(sessionId, tokenId, id)
+  const bodyBuffer = bodyData ? Buffer.from(bodyData) : null
   const isBinary = row.isBinary ?? detectBinaryBody(bodyBuffer ?? undefined, headerContentType)
 
   if (!bodyBuffer || 0 === bodyBuffer.length) {

@@ -1,5 +1,5 @@
 import { defineEventHandler, readBody, createError, type H3Event, type EventHandlerRequest } from 'h3'
-import { getToken, updateToken, deleteToken } from '~~/server/lib/db'
+import { useDatabase } from '~~/server/lib/db'
 import { getOrCreateSession } from '~~/server/lib/session'
 import { useServerEvents } from '~~/server/lib/events'
 
@@ -8,6 +8,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const method = event.node.req.method?.toUpperCase() || 'GET'
   const tokenId = event.context.params?.token
   const events = useServerEvents()
+  const db = useDatabase()
 
   if (true !== ['GET', 'PATCH', 'DELETE'].includes(method)) {
     throw createError({ statusCode: 405, message: 'Method not allowed' })
@@ -17,13 +18,13 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     throw createError({ statusCode: 400, message: 'Token ID is required' })
   }
 
-  const token = await getToken(sessionId, tokenId)
+  const token = await db.tokens.get(sessionId, tokenId)
   if (!token) {
     throw createError({ statusCode: 404, message: 'Token not found' })
   }
 
   if ('DELETE' === method) {
-    await deleteToken(sessionId, tokenId)
+    await db.tokens._delete(sessionId, tokenId)
     events.publish(sessionId, 'token.deleted', { token: { id: tokenId } })
     return { ok: true }
   }
@@ -36,7 +37,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     const headers = (payload.headers as unknown) as Record<string, string> | null
     const responseBody = (payload.body as unknown) as string | null
 
-    await updateToken(sessionId, tokenId, {
+    await db.tokens.update(sessionId, tokenId, {
       responseEnabled: enabled,
       responseStatus: status,
       responseHeaders: headers ? JSON.stringify(headers) : null,

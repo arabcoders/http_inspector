@@ -20,7 +20,7 @@ COPY --from=base /app/.output /app
 COPY README.md /app
 
 ENV NODE_ENV=production
-ENV DATABASE_PATH=/config/http-inspector.sqlite
+ENV STORAGE_PATH=/config
 
 RUN mkdir -p /config
 

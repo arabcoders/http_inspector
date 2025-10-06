@@ -23,6 +23,7 @@ export interface Token {
 
 /**
  * Request entity representing an HTTP request
+ * Note: body is not stored in database - use getRequestBody() to fetch from disk
  */
 export interface Request {
     id: number
@@ -31,7 +32,6 @@ export interface Request {
     method: string
     url: string
     headers: string // JSON string
-    body: Buffer | null
     contentType: string
     contentLength: number
     isBinary: boolean

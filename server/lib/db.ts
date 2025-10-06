@@ -1,283 +1,11 @@
 import { getDb } from '../db/index'
-import { tokens, requests } from '../db/schema'
+import { tokens as tokensSchema, requests as requestsSchema, requestBodies as requestBodiesSchema } from '../db/schema'
 import type { Token, Request, TokenWithCount } from '~~/shared/types'
 import { eq, desc, sql } from 'drizzle-orm'
 import { customAlphabet } from 'nanoid'
+import { useFileStorage } from './file-storage'
 
 const tokenIdGenerator = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8)
-
-export const createToken = async (sessionId: string): Promise<Token> => {
-  const db = getDb()
-  const id = tokenIdGenerator()
-  const now = new Date()
-
-  const token: typeof tokens.$inferInsert = {
-    id,
-    sessionId,
-    createdAt: now,
-    responseEnabled: false,
-    responseStatus: 200,
-    responseHeaders: null,
-    responseBody: null,
-  }
-
-  await db.insert(tokens).values(token)
-
-  return {
-    id,
-    sessionId,
-    createdAt: now,
-    responseEnabled: false,
-    responseStatus: 200,
-    responseHeaders: null,
-    responseBody: null,
-  }
-}
-
-export const getToken = async (sessionId: string, tokenId: string): Promise<Token | null> => {
-  const db = getDb()
-
-  const result = await db.select().from(tokens).where(eq(tokens.id, tokenId)).limit(1)
-
-  if (!result.length || result[0].sessionId !== sessionId) {
-    return null
-  }
-
-  return result[0]
-}
-
-export const getUserTokens = async (sessionId: string): Promise<TokenWithCount[]> => {
-  const db = getDb()
-
-  const result = await db
-    .select({
-      id: tokens.id,
-      sessionId: tokens.sessionId,
-      createdAt: tokens.createdAt,
-      responseEnabled: tokens.responseEnabled,
-      responseStatus: tokens.responseStatus,
-      responseHeaders: tokens.responseHeaders,
-      responseBody: tokens.responseBody,
-      requestCount: sql<number>`count(${requests.id})`,
-    })
-    .from(tokens)
-    .leftJoin(requests, eq(requests.tokenId, tokens.id))
-    .where(eq(tokens.sessionId, sessionId))
-    .groupBy(tokens.id)
-    .orderBy(desc(tokens.createdAt))
-
-  return result.map(row => ({
-    id: row.id,
-    sessionId: row.sessionId,
-    createdAt: row.createdAt,
-    responseEnabled: row.responseEnabled,
-    responseStatus: row.responseStatus,
-    responseHeaders: row.responseHeaders,
-    responseBody: row.responseBody,
-    _count: { requests: row.requestCount },
-  }))
-}
-
-export const updateToken = async (
-  sessionId: string,
-  tokenId: string,
-  updates: Partial<Pick<Token, 'responseEnabled' | 'responseStatus' | 'responseHeaders' | 'responseBody'>>
-): Promise<Token | null> => {
-  const db = getDb()
-
-  // Verify token belongs to session
-  const existing = await getToken(sessionId, tokenId)
-  if (!existing) {
-    return null
-  }
-
-  await db.update(tokens).set(updates).where(eq(tokens.id, tokenId))
-
-  return getToken(sessionId, tokenId)
-}
-
-export const deleteToken = async (sessionId: string, tokenId: string): Promise<void> => {
-  const db = getDb()
-
-  // Verify token belongs to session before deleting
-  const token = await getToken(sessionId, tokenId)
-  if (!token) {
-    return
-  }
-
-  // Cascade delete will handle requests automatically
-  await db.delete(tokens).where(eq(tokens.id, tokenId))
-}
-
-export const deleteAllTokens = async (sessionId: string): Promise<void> => {
-  const db = getDb()
-
-  // Cascade delete will handle requests automatically
-  await db.delete(tokens).where(eq(tokens.sessionId, sessionId))
-}
-
-// ============================================================================
-// Request Operations
-// ============================================================================
-
-export const insertRequest = async (
-  sessionId: string,
-  tokenId: string,
-  method: string,
-  headers: Record<string, string>,
-  body: Buffer | null,
-  url: string,
-  clientIp: string,
-  remoteIp: string,
-): Promise<Request> => {
-  const db = getDb()
-
-  const contentType = headers['content-type'] || headers['Content-Type'] || 'application/octet-stream'
-  const contentLength = body ? body.length : 0
-  const isBinary = body ? detectBinary(body, contentType) : false
-
-  const request: typeof requests.$inferInsert = {
-    tokenId,
-    sessionId,
-    method,
-    headers: JSON.stringify(headers),
-    url,
-    body: body || null,
-    contentType,
-    contentLength,
-    isBinary,
-    clientIp,
-    remoteIp,
-    createdAt: new Date(),
-  }
-
-  const result = await db.insert(requests).values(request).returning()
-
-  return result[0]
-}
-
-export const getRequest = async (sessionId: string, tokenId: string, requestId: number): Promise<Request | null> => {
-  const db = getDb()
-
-  const result = await db
-    .select({
-      id: requests.id,
-      tokenId: requests.tokenId,
-      sessionId: requests.sessionId,
-      method: requests.method,
-      headers: requests.headers,
-      url: requests.url,
-      body: sql<null>`NULL`, // Don't fetch body by default
-      contentType: requests.contentType,
-      contentLength: requests.contentLength,
-      isBinary: requests.isBinary,
-      clientIp: requests.clientIp,
-      remoteIp: requests.remoteIp,
-      createdAt: requests.createdAt,
-    })
-    .from(requests)
-    .where(eq(requests.id, requestId))
-    .limit(1)
-
-  if (!result.length || result[0].sessionId !== sessionId) {
-    return null
-  }
-
-  return result[0]
-}
-
-export const getRequestBody = async (sessionId: string, tokenId: string, requestId: number): Promise<Uint8Array | null> => {
-  const db = getDb()
-
-  const result = await db
-    .select({ body: requests.body })
-    .from(requests)
-    .where(eq(requests.id, requestId))
-    .limit(1)
-
-  if (!result.length) {
-    return null
-  }
-
-  return result[0].body ? new Uint8Array(result[0].body) : null
-}
-
-export const getRequestFull = async (sessionId: string, tokenId: string, requestId: number): Promise<Request | null> => {
-  const db = getDb()
-
-  const result = await db
-    .select()
-    .from(requests)
-    .where(eq(requests.id, requestId))
-    .limit(1)
-
-  if (!result.length || result[0].sessionId !== sessionId) {
-    return null
-  }
-
-  return result[0]
-}
-
-export const getTokenRequests = async (sessionId: string, tokenId: string): Promise<Request[]> => {
-  const db = getDb()
-
-  const result = await db
-    .select({
-      id: requests.id,
-      tokenId: requests.tokenId,
-      sessionId: requests.sessionId,
-      method: requests.method,
-      headers: requests.headers,
-      url: requests.url,
-      body: sql<null>`NULL`, // Don't fetch body for list
-      contentType: requests.contentType,
-      contentLength: requests.contentLength,
-      isBinary: requests.isBinary,
-      clientIp: requests.clientIp,
-      remoteIp: requests.remoteIp,
-      createdAt: requests.createdAt,
-    })
-    .from(requests)
-    .where(eq(requests.tokenId, tokenId))
-    .orderBy(desc(requests.id))
-
-  return result
-}
-
-export const deleteRequest = async (sessionId: string, tokenId: string, requestId: number): Promise<void> => {
-  const db = getDb()
-
-  // Verify request belongs to session
-  const request = await getRequest(sessionId, tokenId, requestId)
-  if (!request) {
-    return
-  }
-
-  await db.delete(requests).where(eq(requests.id, requestId))
-}
-
-export const deleteAllRequests = async (sessionId: string, tokenId: string): Promise<number> => {
-  const db = getDb()
-
-  const result = await db
-    .delete(requests)
-    .where(eq(requests.tokenId, tokenId))
-    .returning({ id: requests.id })
-
-  return result.length
-}
-
-export const getSessionIdForToken = async (tokenId: string): Promise<string | null> => {
-  const db = getDb()
-
-  const result = await db
-    .select({ sessionId: tokens.sessionId })
-    .from(tokens)
-    .where(eq(tokens.id, tokenId))
-    .limit(1)
-
-  return result.length ? result[0].sessionId : null
-}
 
 const detectBinary = (buffer: Buffer, contentType: string): boolean => {
   if (contentType) {
@@ -301,4 +29,367 @@ const detectBinary = (buffer: Buffer, contentType: string): boolean => {
   }
 
   return false
+}
+
+/**
+ * Database operations composable
+ * Provides organized access to all database operations grouped by entity
+ */
+export const useDatabase = () => {
+  const db = getDb()
+  const storage = useFileStorage()
+
+  const tokens = {
+    /**
+     * Create a new token for a session
+     */
+    create: async (sessionId: string): Promise<Token> => {
+      const id = tokenIdGenerator()
+      const now = new Date()
+
+      const token: typeof tokensSchema.$inferInsert = {
+        id,
+        sessionId,
+        createdAt: now,
+        responseEnabled: false,
+        responseStatus: 200,
+        responseHeaders: null,
+        responseBody: null,
+      }
+
+      await db.insert(tokensSchema).values(token)
+
+      return {
+        id,
+        sessionId,
+        createdAt: now,
+        responseEnabled: false,
+        responseStatus: 200,
+        responseHeaders: null,
+        responseBody: null,
+      }
+    },
+
+    /**
+     * Get a token by ID, verifying it belongs to the session
+     */
+    get: async (sessionId: string, tokenId: string): Promise<Token | null> => {
+      const result = await db.select().from(tokensSchema).where(eq(tokensSchema.id, tokenId)).limit(1)
+
+      if (!result.length || result[0].sessionId !== sessionId) {
+        return null
+      }
+
+      return result[0]
+    },
+
+    /**
+     * List all tokens for a session with request counts
+     */
+    list: async (sessionId: string): Promise<TokenWithCount[]> => {
+      const result = await db
+        .select({
+          id: tokensSchema.id,
+          sessionId: tokensSchema.sessionId,
+          createdAt: tokensSchema.createdAt,
+          responseEnabled: tokensSchema.responseEnabled,
+          responseStatus: tokensSchema.responseStatus,
+          responseHeaders: tokensSchema.responseHeaders,
+          responseBody: tokensSchema.responseBody,
+          requestCount: sql<number>`count(${requestsSchema.id})`,
+        })
+        .from(tokensSchema)
+        .leftJoin(requestsSchema, eq(requestsSchema.tokenId, tokensSchema.id))
+        .where(eq(tokensSchema.sessionId, sessionId))
+        .groupBy(tokensSchema.id)
+        .orderBy(desc(tokensSchema.createdAt))
+
+      return result.map(row => ({
+        id: row.id,
+        sessionId: row.sessionId,
+        createdAt: row.createdAt,
+        responseEnabled: row.responseEnabled,
+        responseStatus: row.responseStatus,
+        responseHeaders: row.responseHeaders,
+        responseBody: row.responseBody,
+        _count: { requests: row.requestCount },
+      }))
+    },
+
+    /**
+     * Update token settings
+     */
+    update: async (
+      sessionId: string,
+      tokenId: string,
+      updates: Partial<Pick<Token, 'responseEnabled' | 'responseStatus' | 'responseHeaders' | 'responseBody'>>
+    ): Promise<Token | null> => {
+      // Verify token belongs to session
+      const existing = await tokens.get(sessionId, tokenId)
+      if (!existing) {
+        return null
+      }
+
+      await db.update(tokensSchema).set(updates).where(eq(tokensSchema.id, tokenId))
+
+      return tokens.get(sessionId, tokenId)
+    },
+
+    /**
+     * Delete a single token and its associated request bodies
+     */
+    _delete: async (sessionId: string, tokenId: string): Promise<void> => {
+      // Verify token belongs to session before deleting
+      const token = await tokens.get(sessionId, tokenId)
+      if (!token) {
+        return
+      }
+
+      // Delete body files from disk
+      await storage.deleteToken(sessionId, tokenId)
+
+      // Cascade delete will handle requests and request_bodies automatically
+      await db.delete(tokensSchema).where(eq(tokensSchema.id, tokenId))
+    },
+
+    /**
+     * Delete all tokens for a session
+     */
+    deleteAll: async (sessionId: string): Promise<void> => {
+      // Get all tokens for this session to clean up their bodies
+      const sessionTokens = await db
+        .select({ id: tokensSchema.id })
+        .from(tokensSchema)
+        .where(eq(tokensSchema.sessionId, sessionId))
+
+      // Delete body files for each token
+      for (const token of sessionTokens) {
+        await storage.deleteToken(sessionId, token.id)
+      }
+
+      // Cascade delete will handle requests and request_bodies automatically
+      await db.delete(tokensSchema).where(eq(tokensSchema.sessionId, sessionId))
+    },
+
+    /**
+     * Get session ID for a token (no session verification needed)
+     */
+    getSessionId: async (tokenId: string): Promise<string | null> => {
+      const result = await db
+        .select({ sessionId: tokensSchema.sessionId })
+        .from(tokensSchema)
+        .where(eq(tokensSchema.id, tokenId))
+        .limit(1)
+
+      return result.length ? result[0].sessionId : null
+    },
+  }
+
+  const requests = {
+    /**
+     * Create a new request and save its body to disk
+     */
+    create: async (
+      sessionId: string,
+      tokenId: string,
+      method: string,
+      headers: Record<string, string>,
+      body: Buffer | null,
+      url: string,
+      clientIp: string,
+      remoteIp: string,
+    ): Promise<Request> => {
+      const contentType = headers['content-type'] || headers['Content-Type'] || 'application/octet-stream'
+      const contentLength = body ? body.length : 0
+      const isBinary = body ? detectBinary(body, contentType) : false
+
+      const request: typeof requestsSchema.$inferInsert = {
+        tokenId,
+        sessionId,
+        method,
+        headers: JSON.stringify(headers),
+        url,
+        contentType,
+        contentLength,
+        isBinary,
+        clientIp,
+        remoteIp,
+        createdAt: new Date(),
+      }
+
+      const result = await db.insert(requestsSchema).values(request).returning()
+      const createdRequest = result[0]
+
+      // Save body to disk if present
+      if (body && contentLength > 0) {
+        const filePath = await storage.save(sessionId, tokenId, createdRequest.id, body)
+        await db.insert(requestBodiesSchema).values({
+          requestId: createdRequest.id,
+          filePath,
+          createdAt: new Date(),
+        })
+      }
+
+      return createdRequest
+    },
+
+    /**
+     * Get a request by ID, verifying it belongs to the session
+     */
+    get: async (sessionId: string, tokenId: string, requestId: number): Promise<Request | null> => {
+      const result = await db
+        .select()
+        .from(requestsSchema)
+        .where(eq(requestsSchema.id, requestId))
+        .limit(1)
+
+      if (!result.length || result[0].sessionId !== sessionId) {
+        return null
+      }
+
+      return result[0]
+    },
+
+    /**
+     * List all requests for a token
+     */
+    list: async (sessionId: string, tokenId: string): Promise<Request[]> => {
+      return await db
+        .select()
+        .from(requestsSchema)
+        .where(eq(requestsSchema.tokenId, tokenId))
+        .orderBy(desc(requestsSchema.id))
+    },
+
+    /**
+     * Get request body from disk (loads into memory)
+     */
+    getBody: async (sessionId: string, tokenId: string, requestId: number): Promise<Uint8Array | null> => {
+      // First verify the request belongs to the session
+      const requestCheck = await db
+        .select({ sessionId: requestsSchema.sessionId })
+        .from(requestsSchema)
+        .where(eq(requestsSchema.id, requestId))
+        .limit(1)
+
+      if (!requestCheck.length || requestCheck[0].sessionId !== sessionId) {
+        return null
+      }
+
+      // Get the file path from request_bodies table
+      const bodyRecord = await db
+        .select({ filePath: requestBodiesSchema.filePath })
+        .from(requestBodiesSchema)
+        .where(eq(requestBodiesSchema.requestId, requestId))
+        .limit(1)
+
+      if (!bodyRecord.length) {
+        return null
+      }
+
+      // Read from disk
+      const buffer = await storage.read(bodyRecord[0].filePath)
+      return buffer ? new Uint8Array(buffer) : null
+    },
+
+    /**
+     * Get request body as a stream for efficient large file handling
+     */
+    streamBody: async (sessionId: string, tokenId: string, requestId: number) => {
+      // First verify the request belongs to the session
+      const requestCheck = await db
+        .select({ sessionId: requestsSchema.sessionId })
+        .from(requestsSchema)
+        .where(eq(requestsSchema.id, requestId))
+        .limit(1)
+
+      if (!requestCheck.length || requestCheck[0].sessionId !== sessionId) {
+        return null
+      }
+
+      // Get the file path from request_bodies table
+      const bodyRecord = await db
+        .select({ filePath: requestBodiesSchema.filePath })
+        .from(requestBodiesSchema)
+        .where(eq(requestBodiesSchema.requestId, requestId))
+        .limit(1)
+
+      if (!bodyRecord.length) {
+        return null
+      }
+
+      // Create stream
+      const stream = storage.stream(bodyRecord[0].filePath)
+      if (!stream) {
+        return null
+      }
+
+      return {
+        stream,
+        filePath: bodyRecord[0].filePath,
+      }
+    },
+
+    /**
+     * Delete a single request and its body
+     */
+    _delete: async (sessionId: string, tokenId: string, requestId: number): Promise<void> => {
+      // Verify request belongs to session
+      const request = await requests.get(sessionId, tokenId, requestId)
+      if (!request) {
+        return
+      }
+
+      // Get body file path if exists
+      const bodyRecord = await db
+        .select({ filePath: requestBodiesSchema.filePath })
+        .from(requestBodiesSchema)
+        .where(eq(requestBodiesSchema.requestId, requestId))
+        .limit(1)
+
+      if (bodyRecord.length) {
+        await storage.delete(bodyRecord[0].filePath)
+      }
+
+      // Cascade delete will handle request_bodies automatically
+      await db.delete(requestsSchema).where(eq(requestsSchema.id, requestId))
+    },
+
+    /**
+     * Delete all requests for a token
+     */
+    deleteAll: async (sessionId: string, tokenId: string): Promise<number> => {
+      // Get all request IDs to clean up their body files
+      const requestsToDelete = await db
+        .select({ id: requestsSchema.id })
+        .from(requestsSchema)
+        .where(eq(requestsSchema.tokenId, tokenId))
+
+      // Delete body files
+      for (const req of requestsToDelete) {
+        const bodyRecord = await db
+          .select({ filePath: requestBodiesSchema.filePath })
+          .from(requestBodiesSchema)
+          .where(eq(requestBodiesSchema.requestId, req.id))
+          .limit(1)
+
+        if (bodyRecord.length) {
+          await storage.delete(bodyRecord[0].filePath)
+        }
+      }
+
+      // Cascade delete will handle request_bodies automatically
+      const result = await db
+        .delete(requestsSchema)
+        .where(eq(requestsSchema.tokenId, tokenId))
+        .returning({ id: requestsSchema.id })
+
+      return result.length
+    },
+  }
+
+  return {
+    tokens,
+    requests,
+  }
 }

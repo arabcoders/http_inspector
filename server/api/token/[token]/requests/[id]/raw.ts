@@ -1,8 +1,7 @@
 import { defineEventHandler, createError, type H3Event, type EventHandlerRequest, setResponseHeader, getQuery } from 'h3'
-import { getRequest, getRequestBody, getToken } from '~~/server/lib/db'
+import { useDatabase } from '~~/server/lib/db'
 import { getOrCreateSession } from '~~/server/lib/session'
 import { parseHeaders, capitalizeHeader } from '~~/server/lib/utils'
-import { Readable } from 'stream'
 
 export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   const sessionId = await getOrCreateSession(event)
@@ -12,6 +11,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const id = Number(params.id)
   const tokenId = params.token
   const query = getQuery(event)
+  const db = useDatabase()
 
   if (!tokenId) {
     throw createError({ statusCode: 400, message: 'Token ID is required' })
@@ -21,12 +21,12 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     throw createError({ statusCode: 400, message: 'Invalid request ID' })
   }
 
-  const token = await getToken(sessionId, tokenId)
+  const token = await db.tokens.get(sessionId, tokenId)
   if (!token) {
     throw createError({ statusCode: 404, message: 'Token not found' })
   }
 
-  const row = await getRequest(sessionId, tokenId, id)
+  const row = await db.requests.get(sessionId, tokenId, id)
   if (!row) {
     throw createError({ statusCode: 404, message: 'Request not found' })
   }
@@ -72,20 +72,19 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
         return
       }
 
-      getRequestBody(sessionId, tokenId, id).then(bodyData => {
-        if (!bodyData || 0 === bodyData.length) {
+      db.requests.streamBody(sessionId, tokenId, id).then(bodyStream => {
+        if (!bodyStream) {
           res.end()
           resolve()
           return
         }
 
-        const stream = Readable.from(Buffer.from(bodyData))
-        stream.on('error', streamErr => reject(streamErr))
-        stream.on('end', () => {
+        bodyStream.stream.on('error', (streamErr: Error) => reject(streamErr))
+        bodyStream.stream.on('end', () => {
           res.end()
           resolve()
         })
-        stream.pipe(res, { end: false })
+        bodyStream.stream.pipe(res, { end: false })
       }).catch(reject)
     })
   })

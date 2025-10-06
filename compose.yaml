@@ -10,7 +10,7 @@ services:
       - http_inspector_data:/config
     environment:
       - TRUST_PROXY_CLIENT_IP=false
-      # - DATABASE_PATH=/config/http-inspector.sqlite
+      # - STORAGE_PATH=/config/
       # - SESSION_TTL_DAYS=30
       # - TOKEN_TTL_DAYS=30
       # - REQUEST_TTL_DAYS=7

@@ -31,6 +31,7 @@ const insertRequestMock = vi.fn(async (
     url,
     contentType: headers['content-type'] || 'application/octet-stream',
     contentLength: _body ? _body.length : 0,
+    isBinary: false,
     remoteIp,
     clientIp,
     createdAt: new Date(),
@@ -38,25 +39,31 @@ const insertRequestMock = vi.fn(async (
 })
 
 vi.mock('~~/server/lib/db', () => ({
-  getToken: vi.fn(async (sessionId: string, id: string) => ({ 
-    id, 
-    sessionId,
-    createdAt: new Date(),
-    responseEnabled: false, 
-    responseStatus: 200, 
-    responseHeaders: null, 
-    responseBody: null 
+  useDatabase: vi.fn(() => ({
+    tokens: {
+      get: vi.fn(async (sessionId: string, id: string) => ({ 
+        id, 
+        sessionId,
+        createdAt: new Date(),
+        responseEnabled: false, 
+        responseStatus: 200, 
+        responseHeaders: null, 
+        responseBody: null 
+      })),
+      getSessionId: vi.fn(async () => 'session-123'),
+    },
+    requests: {
+      create: insertRequestMock,
+      list: vi.fn(async (tokenId: string) => [{ 
+        id: 123, 
+        tokenId, 
+        method: 'POST', 
+        headers: '{}', 
+        url: `/api/${tokenId}`, 
+        createdAt: new Date() 
+      }]),
+    },
   })),
-  getSessionIdForToken: vi.fn(async () => 'session-123'),
-  insertRequest: insertRequestMock,
-  listRequestsForToken: vi.fn(async (tokenId: string) => [{ 
-    id: 123, 
-    tokenId, 
-    method: 'POST', 
-    headers: '{}', 
-    url: `/api/${tokenId}`, 
-    createdAt: new Date() 
-  }]),
 }))
 
 describe('integration: payload -> events -> db (handler-level)', () => {

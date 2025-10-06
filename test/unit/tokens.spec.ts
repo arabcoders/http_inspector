@@ -4,17 +4,21 @@ import type { TestH3Event } from '../utils/createH3Event'
 import handler from '../../server/api/token/index'
 
 vi.mock('~~/server/lib/db', () => ({
-  getUserTokens: vi.fn(async () => []),
-  createToken: vi.fn(async () => ({ 
-    id: 'abc123', 
-    sessionId: 'session-123',
-    createdAt: new Date(),
-    responseEnabled: false,
-    responseStatus: 200,
-    responseHeaders: null,
-    responseBody: null,
+  useDatabase: vi.fn(() => ({
+    tokens: {
+      list: vi.fn(async () => []),
+      create: vi.fn(async () => ({ 
+        id: 'abc123', 
+        sessionId: 'session-123',
+        createdAt: new Date(),
+        responseEnabled: false,
+        responseStatus: 200,
+        responseHeaders: null,
+        responseBody: null,
+      })),
+      deleteAll: vi.fn(async () => ({})),
+    },
   })),
-  deleteAllTokens: vi.fn(async () => ({})),
 }))
 
 vi.mock('~~/server/lib/session', () => ({

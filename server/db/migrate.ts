@@ -4,7 +4,8 @@ import { migrate as drizzleMigrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { join } from 'path'
 
 export async function runMigrations(): Promise<void> {
-  const dbPath = process.env.DATABASE_PATH || join(process.cwd(), 'var', 'http-inspector.sqlite')
+  const storagePath = process.env.STORAGE_PATH || process.cwd() + '/var'
+  const dbPath = join(storagePath, 'inspector.sqlite')
   const migrationsPath = join(process.cwd(), 'server', 'db', 'migrations')
 
   console.debug('Running migrations...')

@@ -1,6 +1,7 @@
 import { getDb } from '../db'
-import { sessions, tokens, requests } from '../db/schema'
+import { sessions, tokens, requests, requestBodies } from '../db/schema'
 import { lt, sql } from 'drizzle-orm'
+import { useFileStorage } from './file-storage'
 
 // TTL values (in days)
 const SESSION_TTL_DAYS = 30
@@ -9,6 +10,7 @@ const REQUEST_TTL_DAYS = 7
 
 export const cleanupExpiredData = async () => {
   const db = getDb()
+  const storage = useFileStorage()
 
   console.debug('Starting database cleanup...')
 
@@ -18,6 +20,22 @@ export const cleanupExpiredData = async () => {
   const sessionCutoff = new Date(now.getTime() - SESSION_TTL_DAYS * 24 * 60 * 60 * 1000)
   const tokenCutoff = new Date(now.getTime() - TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000)
   const requestCutoff = new Date(now.getTime() - REQUEST_TTL_DAYS * 24 * 60 * 60 * 1000)
+
+  // Delete old request body files first (before deleting request records)
+  const oldRequestsWithBodies = await db
+    .select({
+      requestId: requestBodies.requestId,
+      filePath: requestBodies.filePath,
+    })
+    .from(requestBodies)
+    .innerJoin(requests, sql`${requests.id} = ${requestBodies.requestId}`)
+    .where(lt(requests.createdAt, requestCutoff))
+
+  console.debug(`Found ${oldRequestsWithBodies.length} old request bodies to delete`)
+
+  for (const record of oldRequestsWithBodies) {
+    await storage.delete(record.filePath)
+  }
 
   // Delete old requests (oldest first to free up space)
   const deletedRequests = await db

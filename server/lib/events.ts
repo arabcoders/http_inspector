@@ -9,12 +9,7 @@
  * are also published to their respective token channels.
  */
 
-import type {
-    ServerEventType,
-    ServerEventPayload,
-    Subscriber,
-    ChannelType
-} from '~~/shared/types'
+import type { ServerEventType, ServerEventPayload, Subscriber, ChannelType } from '~~/shared/types'
 
 /**
  * Internal subscriber storage

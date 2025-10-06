@@ -5,6 +5,14 @@ CREATE TABLE `key_value_store` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE `request_bodies` (
+	`request_id` integer PRIMARY KEY NOT NULL,
+	`file_path` text NOT NULL,
+	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
+	FOREIGN KEY (`request_id`) REFERENCES `requests`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `request_body_created_idx` ON `request_bodies` (`created_at`);--> statement-breakpoint
 CREATE TABLE `requests` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`token_id` text NOT NULL,
@@ -12,7 +20,6 @@ CREATE TABLE `requests` (
 	`method` text NOT NULL,
 	`url` text NOT NULL,
 	`headers` text NOT NULL,
-	`body` blob,
 	`content_type` text NOT NULL,
 	`content_length` integer DEFAULT 0 NOT NULL,
 	`is_binary` integer NOT NULL,

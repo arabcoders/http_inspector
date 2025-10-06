@@ -32,7 +32,6 @@ const mockInsertRequest = vi.fn(async (
     method,
     headers: JSON.stringify(headers),
     url,
-    body: body ? new Uint8Array(body) : null,
     contentType: headers['content-type'] || 'application/octet-stream',
     contentLength: body ? body.length : 0,
     isBinary: false,
@@ -61,8 +60,14 @@ const mockGetToken = vi.fn(async (_sessionId: string, tokenId: string): Promise<
 }))
 
 vi.mock('~~/server/lib/db', () => ({
-  getToken: mockGetToken,
-  insertRequest: mockInsertRequest,
+  useDatabase: vi.fn(() => ({
+    tokens: {
+      get: mockGetToken,
+    },
+    requests: {
+      create: mockInsertRequest,
+    },
+  })),
 }))
 
 vi.mock('~~/server/lib/session', () => ({
