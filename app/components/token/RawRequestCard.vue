@@ -11,12 +11,12 @@
           </span>
         </div>
         <div class="flex items-center gap-1">
-          <UTooltip v-if="!isBinary" :text="canCopyRaw ? 'Copy raw request' : 'Raw request not loaded'">
+          <UTooltip v-if="request && !isBinary" :text="canCopyRaw ? 'Copy raw request' : 'Raw request not loaded'">
             <UButton :disabled="!canCopyRaw" size="xs" variant="ghost" color="neutral" icon="i-lucide-copy"
               @click.stop="handleCopyRaw" />
           </UTooltip>
 
-          <UTooltip text="Download raw request">
+          <UTooltip v-if="request" text="Download raw request">
             <ULink type="button" variant="ghost" color="neutral" size="xs" role="button"
               :href="`/api/token/${tokenId}/requests/${request?.id}/raw`" target="_blank">
               <UIcon name="i-lucide-download" size="xs" class="h-4 w-4" />

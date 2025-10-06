@@ -4,7 +4,7 @@
     <div class="flex items-center justify-between gap-3 border-b border-gray-200 dark:border-gray-800 px-4 py-3">
       <div class="flex items-center gap-2">
         <UBadge color="neutral" variant="subtle" size="md" class="uppercase tracking-wide">
-          Requests
+          REQs
         </UBadge>
         <UBadge color="primary" variant="soft" size="md">
           {{ requests.length }}
@@ -75,9 +75,12 @@
                 </div>
 
                 <div class="flex items-center text-xs text-gray-600 dark:text-gray-400">
-                  <span v-if="request.clientIp || request.remoteIp" class="truncate">
-                    {{ request.remoteIp || request.clientIp }}
-                  </span>
+                  <UTooltip text="Click to copy client IP">
+                    <span v-if="request.clientIp || request.remoteIp" class="truncate hover:cursor-pointer"
+                      @click="handleCopyIp(request)">
+                      {{ request.remoteIp || request.clientIp }}
+                    </span>
+                  </UTooltip>
                   <span class="ml-auto">
                     {{ formatTime(request.createdAt) }}
                   </span>
@@ -147,5 +150,18 @@ const formatTime = (value: unknown): string => {
   } catch {
     return ''
   }
+}
+
+const handleCopyIp = async (request: RequestSummary) => {
+  const clientIp = request.remoteIp || request.clientIp || undefined
+  if (!clientIp) {
+    return
+  }
+
+  if (false === (await copyText(clientIp))) {
+    return
+  }
+
+  notify({ title: 'Client IP copied', description: clientIp, color: 'success' })
 }
 </script>

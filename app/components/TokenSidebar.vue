@@ -31,23 +31,33 @@
             <div class="space-y-1 p-2">
                 <template v-if="tokens && tokens.length">
                     <div v-for="token in tokens" :key="token.id"
-                        class="w-full rounded-lg px-3 py-2.5 transition-all duration-150 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <div class="flex items-start justify-between gap-3">
-                            <div class="space-y-1 flex-1 min-w-0">
+                        class="w-full rounded-lg px-3 py-2.5 transition-all duration-150 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                        :class="[incomingTokenIds && incomingTokenIds.has(token.id) ? 'ring-2 ring-success animate-pulse' : '']">
+                        <div class="flex items-start justify-between gap-3 mb-1">
+                            <div class="flex-1 min-w-0 flex items-center gap-2">
                                 <ULink :to="`/token/${token.id}`"
                                     class="font-mono text-sm text-primary hover:underline block truncate">
                                     {{ token.id }}
                                 </ULink>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">
-                                    {{ getRequestCount(token) }} requests · {{ formatDate(token.createdAt) }}
-                                </p>
+                                <UBadge v-if="incomingTokenIds && incomingTokenIds.has(token.id)" color="success" variant="solid" size="xs"
+                                    class="font-semibold uppercase">
+                                    New
+                                </UBadge>
                             </div>
                             <div class="flex items-center gap-1 flex-shrink-0">
-                                <UButton variant="ghost" color="neutral" size="sm" icon="i-lucide-copy"
-                                    @click="$emit('copy-url', token.id)" />
-                                <UButton variant="ghost" color="error" size="sm" icon="i-lucide-trash-2"
-                                    aria-label="Delete token" @click="$emit('delete', token.id)" />
+                                <UTooltip text="Copy token payload URL">
+                                    <UButton variant="ghost" color="neutral" size="sm" icon="i-lucide-copy"
+                                        @click="$emit('copy-url', token.id)" />
+                                </UTooltip>
+                                <UTooltip text="Delete token">
+                                    <UButton variant="ghost" color="error" size="sm" icon="i-lucide-trash-2"
+                                        @click="$emit('delete', token.id)" />
+                                </UTooltip>
                             </div>
+                        </div>
+                        <div class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400 select-none">
+                            <span>{{ getRequestCount(token) }} requests</span>
+                            <span>{{ formatDate(token.createdAt) }}</span>
                         </div>
                     </div>
                 </template>
@@ -77,6 +87,7 @@ const props = defineProps<{
     requestCounts?: Map<string, number>
     isOpen?: boolean
     showMobileClose?: boolean
+    incomingTokenIds?: Set<string>
 }>()
 
 defineEmits<{

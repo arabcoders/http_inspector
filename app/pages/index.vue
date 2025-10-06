@@ -5,9 +5,9 @@
       <div v-if="isSidebarOpen" class="fixed inset-0 z-30 backdrop-blur-sm bg-black/40 transition-opacity lg:hidden"
         @click="closeSidebar" />
 
-      <TokenSidebar :tokens="sortedTokens" :request-counts="requestCounts" :is-open="isSidebarOpen"
-        :show-mobile-close="true" @create="create" @delete-all="showDeleteAllModal = true" @delete="deleteToken"
-        @copy-url="copyPayloadURL" @close="closeSidebar" />
+      <TokenSidebar :tokens="sortedTokens" :request-counts="requestCounts" :incoming-token-ids="incomingTokenIds"
+        :is-open="isSidebarOpen" :show-mobile-close="true" @create="create" @delete-all="showDeleteAllModal = true"
+        @delete="deleteToken" @copy-url="copyPayloadURL" @close="closeSidebar" />
 
       <main class="flex-1 overflow-auto">
         <div class="mb-4 flex items-center justify-between lg:hidden">
@@ -53,6 +53,7 @@ type Token = { id: string; createdAt?: string; _count?: { requests?: number } }
 const { tokens, loadTokens, createToken, clearTokens } = useTokens()
 
 const requestCounts = ref<Map<string, number>>(new Map())
+const incomingTokenIds = ref<Set<string>>(new Set())
 const showDeleteAllModal = ref(false)
 const showDeleteTokenModal = ref(false)
 const tokenToDelete = ref<string | null>(null)
@@ -120,7 +121,7 @@ const handleClientEvent = (payload: SSEEventPayload) => {
           description: `Click to view token ${rTokenId}`,
           color: 'success',
           actions: [{
-            label: 'View',
+            label: 'View Token',
             onClick: async () => { await navigateTo(`/token/${rTokenId}`) },
           }],
         })
@@ -145,13 +146,25 @@ const handleClientEvent = (payload: SSEEventPayload) => {
       const currentCount = requestCounts.value.get(tokenId) ?? (token?._count?.requests ?? 0)
       requestCounts.value.set(tokenId, currentCount + 1)
 
+      // Add to incoming tokens set
+      if (!incomingTokenIds.value.has(tokenId)) {
+        incomingTokenIds.value.add(tokenId)
+        incomingTokenIds.value = new Set(incomingTokenIds.value)
+
+        // Remove from incoming after 3 seconds
+        setTimeout(() => {
+          incomingTokenIds.value.delete(tokenId)
+          incomingTokenIds.value = new Set(incomingTokenIds.value)
+        }, 3000)
+      }
+
       const request = payload.request as { id?: number; method?: string } | undefined
       notify({
         title: `${request?.method || 'Request'} → ${tokenId}`,
         description: `Click to view request #${request?.id || ''}`,
         color: 'success',
         actions: [{
-          label: 'View',
+          label: 'View Request',
           onClick: async () => { await navigateTo(`/token/${tokenId}`) },
         }],
       })

@@ -166,7 +166,7 @@
               </div>
               <div class="flex items-center gap-1">
                 <div class="flex justify-end">
-                  <UTooltip text="Download body">
+                  <UTooltip v-if="request" text="Download body">
                     <ULink role="button" variant="ghost" color="neutral" size="xs" target="_blank"
                       :href="`/api/token/${tokenId}/requests/${request.id}/body/download`"
                       :disabled="!request || (!isBinary && !bodyState)"
@@ -197,7 +197,7 @@
                 class="flex h-40 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                 Select a request to view body.
               </div>
-              <CodeHighlight v-else :code="bodyState.content" :language="bodyState.language" />
+              <CodeHighlight v-else :code="bodyState.content || 'No body attached to request'" :language="bodyState.language" />
             </div>
           </div>
         </UCard>
@@ -264,7 +264,7 @@ const bodySummary = computed(() => {
     : loadedLength
 
   if (!effectiveLength) {
-    return 'Empty body'
+    return '0 bytes'
   }
   return `${effectiveLength.toLocaleString()} bytes`
 })
