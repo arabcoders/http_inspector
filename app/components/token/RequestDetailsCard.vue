@@ -25,8 +25,8 @@
           {{ request.method }}
         </UBadge>
 
-        <UBadge color="neutral" variant="outline" size="md">
-          #{{ request.id }}
+        <UBadge v-if="requestNumber" color="neutral" variant="outline" size="md">
+          #{{ requestNumber }}
         </UBadge>
 
         <template v-if="clientIp">
@@ -212,7 +212,7 @@ import { notify } from '~/composables/useNotificationBridge'
 import CodeHighlight from '~/components/CodeHighlight.vue'
 import type { RequestSummary, QueryParam, HeaderParam, BodyState, MethodBadgeProps } from '~~/shared/types'
 
-const props = defineProps<{ request: RequestSummary | null, tokenId: string }>()
+const props = defineProps<{ request: RequestSummary | null, requestNumber: number | null, tokenId: string }>()
 
 const bodyLoading = ref(false)
 const bodyState = ref<BodyState | null>(null)
@@ -304,7 +304,7 @@ const copyAllQueryParams = async () => {
 
 const isBinary = computed(() => Boolean(props.request?.isBinary))
 
-watch([() => props.request?.id, isBodyOpen], async ([newId, isOpen]) => {
+watch([() => props.request?.id, isBodyOpen], async ([newId, isOpen]: [string | undefined, boolean]) => {
   if (!newId || !isOpen) {
     console.log('Not loading body - no request or not open')
     return
@@ -316,7 +316,7 @@ watch([() => props.request?.id, isBodyOpen], async ([newId, isOpen]) => {
     return
   }
 
-  await loadBody(newId as number)
+  await loadBody(newId)
 }, { immediate: false })
 
 watch(() => props.request?.id, () => bodyState.value = null)
@@ -334,7 +334,7 @@ const toggleKV = (key: string, index: number) => {
 
 const isExpanded = (key: string, index: number): boolean => expandedKV.value.has(`${key}-${index}`)
 
-const loadBody = async (requestId: number) => {
+const loadBody = async (requestId: string) => {
   bodyLoading.value = true
   try {
     const res = await fetch(`/api/token/${props.tokenId}/requests/${requestId}/body`)

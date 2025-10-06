@@ -6,7 +6,6 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   if (true !== useRuntimeConfig().sessionRestoreEnabled) {
     throw createError({ statusCode: 403, message: 'Session restoration is disabled' })
   }
-
   const body = await readBody(event)
   const { sessionId } = body
 
@@ -14,14 +13,10 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     throw createError({ statusCode: 400, message: 'sessionId is required' })
   }
 
-  // Validate session ID format (alphanumeric 16-32 chars OR friendly format word-word-word)
-  const isTechnicalId = /^[a-zA-Z0-9_-]{16,32}$/.test(sessionId)
-  const isFriendlyId = isValidFriendlyId(sessionId)
-
-  if (!isTechnicalId && !isFriendlyId) {
+  if (false === isValidFriendlyId(sessionId)) {
     throw createError({
       statusCode: 400,
-      message: 'Invalid session ID format. Use either technical ID or friendly ID (e.g., famous-amethyst-panda)',
+      message: 'Invalid session ID format. Use (e.g., famous-amethyst-panda)',
     })
   }
 

@@ -44,10 +44,10 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   type EventContextParams = { params?: Record<string, string> }
   const ctx = (event.context as unknown as EventContextParams) || {}
   const params = ctx.params || {}
-  const token = params.token as string | undefined
+  const tokenString = params.token as string | undefined
   const db = useDatabase()
   
-  if (!token) {
+  if (!tokenString) {
     event.node.res.statusCode = 404
     event.node.res.end('not found')
     return
@@ -73,7 +73,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     return
   }
 
-  const sessionId = await db.tokens.getSessionId(token)
+  const sessionId = await db.tokens.getSessionId(tokenString)
 
   if (!sessionId) {
     event.node.res.statusCode = 404
@@ -81,9 +81,9 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     return
   }
 
-  const tokenRow = await db.tokens.get(sessionId, token)
+  const token = await db.tokens.get(sessionId, tokenString)
 
-  if (!tokenRow) {
+  if (!token) {
     event.node.res.statusCode = 404
     event.node.res.end()
     return
@@ -102,15 +102,15 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   // Ingest the request and publish events
   await ingestRequest(
     sessionId,
-    token,
+    token.id,
     method,
     headersObj,
     buf,
-    event.node.req.url || '/api/payload/' + token,
+    event.node.req.url || '/api/payload/' + tokenString,
     event.node.req.socket.remoteAddress || '127.0.0.1'
   )
 
-  const resp = await buildResponse(tokenRow)
+  const resp = await buildResponse(token)
 
   for (const [k, v] of Object.entries(CORS_HEADERS)) {
     event.node.res.setHeader(k, v)

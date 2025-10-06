@@ -60,7 +60,7 @@ import CodeHighlight from '~/components/CodeHighlight.vue'
 import { notify } from '~/composables/useNotificationBridge'
 import type { RequestSummary } from '~~/shared/types'
 
-const props = defineProps<{ request: RequestSummary | null, tokenId: string }>()
+const props = defineProps<{ request: RequestSummary | null, requestNumber: number | null, tokenId: string }>()
 
 const isOpen = usePersistedState('raw-request-open', false)
 const rawValue = ref<string | null>(null)
@@ -73,20 +73,20 @@ const summary = computed(() => {
   if (!props.request) {
     return 'Select a request to inspect the raw payload.'
   }
-  return `#${props.request.id} · ${props.request.method}`
+  return `#${props.requestNumber} · ${props.request.method}`
 })
 
-watch([() => props.request?.id, isOpen], async ([requestId, open]) => {
+watch([() => props.request?.id, isOpen], async ([requestId, open]: [string | undefined, boolean]) => {
   if (!requestId || !open || isBinary.value) {
     return
   }
 
-  await loadRaw(requestId as number)
+  await loadRaw(requestId)
 }, { immediate: false })
 
 watch(() => props.request?.id, () => rawValue.value = null)
 
-const loadRaw = async (requestId: number) => {
+const loadRaw = async (requestId: string) => {
   rawLoading.value = true
   try {
     const res = await fetch(`/api/token/${props.tokenId}/requests/${requestId}/raw`)

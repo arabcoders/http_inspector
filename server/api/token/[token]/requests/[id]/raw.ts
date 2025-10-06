@@ -8,7 +8,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   type EventParams = { params?: Record<string, string> }
   const ctx = (event.context as unknown as EventParams) || {}
   const params = ctx.params || {}
-  const id = Number(params.id)
+  const id = params.id
   const tokenId = params.token
   const query = getQuery(event)
   const db = useDatabase()
@@ -17,7 +17,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     throw createError({ statusCode: 400, message: 'Token ID is required' })
   }
 
-  if (Number.isNaN(id)) {
+  if (!id) {
     throw createError({ statusCode: 400, message: 'Invalid request ID' })
   }
 

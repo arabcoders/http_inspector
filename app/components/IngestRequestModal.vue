@@ -112,7 +112,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void
-    (e: 'success', requestId: number): void
+    (e: 'success', requestId: string): void
 }>()
 
 const isOpen = computed({
@@ -125,7 +125,7 @@ const clientIp = ref('')
 const remoteIp = ref('')
 const loading = ref(false)
 const error = ref<string | null>(null)
-const success = ref<{ id: number } | null>(null)
+const success = ref<{ id: string } | null>(null)
 const errors = ref<{
     raw?: string
     clientIp?: string

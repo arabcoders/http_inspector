@@ -55,7 +55,7 @@
                     {{ request.method }}
                   </UBadge>
 
-                  <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ request.id }}</span>
+                  <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ getRequestNumber(request.id) }}</span>
 
                   <UBadge v-if="incomingIds && incomingIds.has(request.id)" color="success" variant="solid" size="xs"
                     class="font-semibold uppercase">
@@ -98,17 +98,22 @@
 import type { RequestSummary, MethodBadgeProps } from '~~/shared/types'
 
 defineEmits<{
-  (e: 'select' | 'delete', id: number): void
+  (e: 'select' | 'delete', id: string): void
   (e: 'copy-url' | 'clear' | 'close' | 'ingest'): void
 }>()
 
-defineProps<{
+const props = defineProps<{
   requests: Array<RequestSummary>
-  selectedRequestId: number | null
+  selectedRequestId: string | null
   copyState?: 'idle' | 'copied'
-  incomingIds?: Set<number>
+  incomingIds?: Set<string>
   showMobileClose?: boolean
 }>()
+
+const getRequestNumber = (requestId: string): number => {
+  const index = props.requests.findIndex((r: RequestSummary) => r.id === requestId)
+  return index !== -1 ? props.requests.length - index : 0
+}
 
 const getMethodBadgeProps = (method: string): MethodBadgeProps => {
   const normalized = method.toUpperCase()

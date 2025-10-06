@@ -51,6 +51,7 @@ vi.mock('~~/server/lib/db', () => ({
         responseBody: null 
       })),
       getSessionId: vi.fn(async () => 'session-123'),
+      getTokenString: vi.fn(async (tokenId: string) => tokenId),
     },
     requests: {
       create: insertRequestMock,

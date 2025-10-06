@@ -8,14 +8,14 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     type EventParams = { params?: Record<string, string> }
     const ctx = (event.context as unknown as EventParams) || {}
     const params = ctx.params || {}
-    const tokenId = params.token
+    const tokenString = params.token
     const db = useDatabase()
 
-    if (!tokenId) {
+    if (!tokenString) {
         throw createError({ statusCode: 400, message: 'Token ID is required' })
     }
 
-    const token = await db.tokens.get(sessionId, tokenId)
+    const token = await db.tokens.get(sessionId, tokenString)
     if (!token) {
         throw createError({ statusCode: 404, message: 'Token not found' })
     }
@@ -43,7 +43,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     const fallbackIp = event.node.req.socket?.remoteAddress || '127.0.0.1'
     const created = await ingestRequest(
         sessionId,
-        tokenId,
+        token.id,
         parsed.method,
         parsed.headers,
         bodyBuffer,

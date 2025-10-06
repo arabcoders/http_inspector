@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "686b8e92-2580-4f5e-99b4-ddff03c40f38",
+  "id": "55e2b032-53c3-48dd-a20e-855dab9d842d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "key_value_store": {
@@ -44,69 +44,15 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "request_bodies": {
-      "name": "request_bodies",
-      "columns": {
-        "request_id": {
-          "name": "request_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "file_path": {
-          "name": "file_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {
-        "request_body_created_idx": {
-          "name": "request_body_created_idx",
-          "columns": [
-            "created_at"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "request_bodies_request_id_requests_id_fk": {
-          "name": "request_bodies_request_id_requests_id_fk",
-          "tableFrom": "request_bodies",
-          "tableTo": "requests",
-          "columnsFrom": [
-            "request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "requests": {
       "name": "requests",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": true
+          "autoincrement": false
         },
         "token_id": {
           "name": "token_id",
@@ -177,6 +123,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "body_path": {
+          "name": "body_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "created_at": {
@@ -314,6 +267,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "session_id": {
           "name": "session_id",
           "type": "text",
@@ -361,6 +321,20 @@
         }
       },
       "indexes": {
+        "tokens_token_unique": {
+          "name": "tokens_token_unique",
+          "columns": [
+            "token"
+          ],
+          "isUnique": true
+        },
+        "token_token_idx": {
+          "name": "token_token_idx",
+          "columns": [
+            "token"
+          ],
+          "isUnique": false
+        },
         "token_session_idx": {
           "name": "token_session_idx",
           "columns": [

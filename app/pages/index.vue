@@ -160,7 +160,7 @@ const handleClientEvent = (payload: SSEEventPayload): void => {
       const request = payload.request as { id?: number; method?: string } | undefined
       notify({
         title: `${request?.method || 'Request'} → ${tokenId}`,
-        description: `Click to view request #${request?.id || ''}`,
+        description: `Click to view`,
         color: 'success',
         actions: [{
           label: 'View Request',

@@ -104,7 +104,9 @@ export async function ingestRequest(
         remoteIp
     )
 
-    useServerEvents().publish(sessionId, 'request.received', { token: tokenId, request: created })
+    const tokenString = await db.tokens.getTokenString(tokenId) || tokenId
+
+    useServerEvents().publish(sessionId, 'request.received', { token: tokenString, request: created })
 
     return created
 }
@@ -140,7 +142,7 @@ export function parseRawRequest(rawText: string): { method: string, url: string,
 
     const method = requestLineParts[1]
     const url = requestLineParts[2]
-    
+
     // Note: URL can be either a path (/api/test) or a full URL (http://example.com/api/test)
     // Both formats are supported and stored as-is
 

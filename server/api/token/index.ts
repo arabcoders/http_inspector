@@ -16,8 +16,8 @@ export default defineEventHandler(async (event) => {
 
   if (method === 'POST') {
     const token = await db.tokens.create(sessionId)
-    events.publish(sessionId, 'token.created', { token: { id: token.id, createdAt: token.createdAt } })
-    return { id: token.id }
+    events.publish(sessionId, 'token.created', { token: { id: token.id, token: token.token, createdAt: token.createdAt } })
+    return { id: token.id, token: token.token }
   }
 
   if (method === 'DELETE') {

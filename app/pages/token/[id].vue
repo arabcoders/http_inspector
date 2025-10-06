@@ -18,7 +18,7 @@
               Requests
             </UButton>
             <UBadge v-if="selectedRequest" size="sm">
-              {{ selectedRequest.id }}
+              #{{ selectedRequestNumber }}
             </UBadge>
             <div class="flex gap-2">
               <UButton type="button" variant="soft" color="primary" icon="i-lucide-upload"
@@ -33,8 +33,8 @@
           </div>
           <div class="grid gap-6 px-6 pb-6 lg:p-6">
             <ResponseSettingsCard :token-id="tokenId" />
-            <RawRequestCard :request="selectedRequest" :token-id="tokenId" />
-            <RequestDetailsCard :request="selectedRequest" :token-id="tokenId" />
+            <RawRequestCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
+            <RequestDetailsCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
           </div>
         </main>
       </ClientOnly>
@@ -67,18 +67,23 @@ const route = useRoute()
 const tokenId = computed(() => String(route.params.id || ''))
 
 const requests = ref<RequestSummary[]>([])
-const selectedRequestId = ref<number | null>(null)
-const incomingIds = ref<Set<number>>(new Set())
+const selectedRequestId = ref<string | null>(null)
+const incomingIds = ref<Set<string>>(new Set())
 const copyState = ref<'idle' | 'copied'>('idle')
 const showClearModal = ref(false)
 const showIngestModal = ref(false)
 const isSidebarOpen = useState<boolean>('token-request-sidebar-open', () => false)
 const tokenExists = ref(false)
 
-const latestRequestIdRef = ref<number | null>(null)
-const selectedRequestIdRef = ref<number | null>(null)
+const latestRequestIdRef = ref<string | null>(null)
+const selectedRequestIdRef = ref<string | null>(null)
 
 const selectedRequest = computed(() => requests.value.find(r => r.id === selectedRequestId.value) || null)
+const selectedRequestNumber = computed(() => {
+  if (!selectedRequest.value) return null
+  const index = requests.value.findIndex(r => r.id === selectedRequest.value!.id)
+  return index !== -1 ? requests.value.length - index : null
+})
 watch(requests, n => latestRequestIdRef.value = n.length && n[0] ? n[0].id : null)
 
 watch(selectedRequestId, async newId => {
@@ -90,10 +95,9 @@ watch(selectedRequestId, async newId => {
 
   const basePath = `/token/${tokenId.value}`
 
-  if (typeof newId === 'number') {
-    const newIdStr = newId.toString()
-    if (route.query.request !== newIdStr) {
-      const nextQuery: LocationQueryRaw = { ...route.query, request: newIdStr }
+  if (typeof newId === 'string') {
+    if (route.query.request !== newId) {
+      const nextQuery: LocationQueryRaw = { ...route.query, request: newId }
       await navigateTo({ path: basePath, query: nextQuery }, { replace: true })
     }
   } else if (route.query.request) {
@@ -126,8 +130,8 @@ const loadRequests = async () => {
     // Check for request query parameter
     const requestIdParam = route.query.request
     if (requestIdParam) {
-      const requestId = Number(requestIdParam)
-      if (!isNaN(requestId) && data.some(r => r.id === requestId)) {
+      const requestId = String(requestIdParam)
+      if (data.some(r => r.id === requestId)) {
         selectedRequestId.value = requestId
         return
       }
@@ -146,7 +150,7 @@ const loadRequests = async () => {
   }
 }
 
-const handleSelectRequest = async (id: number) => {
+const handleSelectRequest = async (id: string) => {
   selectedRequestId.value = id
   closeSidebar()
   if (incomingIds.value.has(id)) {
@@ -155,7 +159,7 @@ const handleSelectRequest = async (id: number) => {
   }
 }
 
-const handleDeleteRequest = async (id: number) => {
+const handleDeleteRequest = async (id: string) => {
   try {
     const res = await fetch(`/api/token/${tokenId.value}/requests/${id}`, { method: 'DELETE' })
     if (res.ok) {
@@ -207,16 +211,19 @@ const handleClearRequests = async () => {
   }
 }
 
-const handleIngestSuccess = async (requestId: number) => {
+const handleIngestSuccess = async (requestId: string) => {
   // Reload requests to get the newly ingested request
   await loadRequests()
 
   // Select the newly ingested request
   selectedRequestId.value = requestId
 
+  // Find the request number for display
+  const requestNumber = requests.value.findIndex(r => r.id === requestId) + 1
+
   notify({
     title: 'Request ingested',
-    description: `Request #${requestId} has been added successfully`,
+    description: `Request #${requestNumber} has been added successfully`,
     variant: 'success'
   })
 }
@@ -257,9 +264,11 @@ const handleClientEvent = (payload: SSEEventPayload) => {
         }, 3000)
       }
 
+      const requestNumber = requests.value.findIndex(r => r.id === incoming.id) + 1
+
       notify({
         title: `Request ${incoming.method}`,
-        description: `Captured #${incoming.id}`,
+        description: `Captured #${requestNumber}`,
         color: 'success',
         actions: [{
           label: 'View',
@@ -277,7 +286,7 @@ const handleClientEvent = (payload: SSEEventPayload) => {
     }
 
     case 'request.deleted': {
-      if (typeof payload.requestId !== 'number') {
+      if (typeof payload.requestId !== 'string') {
         break
       }
       console.log('Deleting request with ID:', payload.requestId, requests.value.map(r => r.id))

@@ -2,8 +2,8 @@
  * Session entity representing a user session
  */
 export interface Session {
-    id: string
-    friendlyId: string
+    id: string // UUID - internal primary key, also used for cookies
+    friendlyId: string // User-visible friendly ID
     createdAt: Date
     lastAccessedAt: Date
 }
@@ -12,8 +12,9 @@ export interface Session {
  * Token entity for webhook endpoints
  */
 export interface Token {
-    id: string
-    sessionId: string
+    id: string // UUID - internal primary key
+    token: string // User-visible token string
+    sessionId: string // References session.id (UUID)
     createdAt: Date
     responseEnabled: boolean
     responseStatus: number
@@ -23,12 +24,12 @@ export interface Token {
 
 /**
  * Request entity representing an HTTP request
- * Note: body is not stored in database - use getRequestBody() to fetch from disk
+ * Note: body is stored on disk at bodyPath location
  */
 export interface Request {
-    id: number
-    tokenId: string
-    sessionId: string
+    id: string // UUID - internal primary key
+    tokenId: string // References token.id (UUID)
+    sessionId: string // References session.id (UUID)
     method: string
     url: string
     headers: string // JSON string
@@ -37,6 +38,7 @@ export interface Request {
     isBinary: boolean
     clientIp: string
     remoteIp: string
+    bodyPath: string | null // Relative path to body file
     createdAt: Date
 }
 
@@ -57,10 +59,9 @@ export type InsertToken = Omit<Token, 'createdAt' | 'responseEnabled' | 'respons
     responseEnabled?: boolean
     responseStatus?: number
 }
-export type InsertRequest = Omit<Request, 'id' | 'createdAt' | 'body' | 'contentLength'> & {
-    id?: number
-    body?: Buffer | null
+export type InsertRequest = Omit<Request, 'createdAt' | 'contentLength' | 'bodyPath'> & {
     contentLength?: number
+    bodyPath?: string | null
     createdAt?: Date
 }
 export type InsertKeyValue = Omit<KeyValue, 'createdAt' | 'updatedAt'> & {
@@ -80,7 +81,7 @@ export type TokenWithCount = Token & { _count?: { requests: number } }
 /**
  * Token list item for frontend display (serialized dates)
  */
-export type TokenListItem = Pick<Token, 'id'> & {
+export type TokenListItem = Pick<Token, 'id' | 'token'> & {
     createdAt?: string
     _count?: { requests: number }
 }
@@ -158,12 +159,12 @@ export interface SSEEventPayload {
  */
 export interface ServerEventMap {
     'request.received': { token: string; request: Request }
-    'request.deleted': { token: string; requestId: number }
+    'request.deleted': { token: string; requestId: string }
     'request.cleared': { token: string }
-    'token.created': { token: Pick<Token, 'id' | 'createdAt'> }
-    'token.deleted': { token: { id: string } }
+    'token.created': { token: Pick<Token, 'id' | 'token' | 'createdAt'> }
+    'token.deleted': { token: { id: string; token: string } }
     'token.cleared': Record<string, never>
-    'token.response.updated': { token: { id: string; responseEnabled: boolean; responseStatus: number } }
+    'token.response.updated': { token: { id: string; token: string; responseEnabled: boolean; responseStatus: number } }
 }
 
 /**
@@ -174,12 +175,12 @@ export interface SSEEventMap {
         type: 'request.received'
         token: string
         request: Record<string, unknown>
-        requestId: number
+        requestId: string
     }
     'request.deleted': {
         type: 'request.deleted'
         token: string
-        requestId: number
+        requestId: string
     }
     'request.cleared': {
         type: 'request.cleared'

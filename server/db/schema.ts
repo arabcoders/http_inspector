@@ -2,8 +2,8 @@ import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
 
 export const sessions = sqliteTable('sessions', {
-    id: text('id').primaryKey(),
-    friendlyId: text('friendly_id').notNull().unique(),
+    id: text('id').primaryKey(), // UUID - internal primary key, also used for cookies
+    friendlyId: text('friendly_id').notNull().unique(), // User-visible friendly ID
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     lastAccessedAt: integer('last_accessed_at', { mode: 'timestamp' }).notNull(),
 }, (table) => [
@@ -12,7 +12,8 @@ export const sessions = sqliteTable('sessions', {
 ])
 
 export const tokens = sqliteTable('tokens', {
-    id: text('id').primaryKey(),
+    id: text('id').primaryKey(), // UUID - internal primary key
+    token: text('token').notNull().unique(), // User-visible token string (the webhook token)
     sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     responseEnabled: integer('response_enabled', { mode: 'boolean' }).notNull().default(false),
@@ -20,12 +21,13 @@ export const tokens = sqliteTable('tokens', {
     responseHeaders: text('response_headers'),
     responseBody: text('response_body'),
 }, (table) => [
+    index('token_token_idx').on(table.token),
     index('token_session_idx').on(table.sessionId),
     index('token_created_idx').on(table.createdAt), // For cleanup based on TTL
 ])
 
 export const requests = sqliteTable('requests', {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: text('id').primaryKey(), // UUID - internal primary key
     tokenId: text('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
     sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
     method: text('method').notNull(),
@@ -36,19 +38,12 @@ export const requests = sqliteTable('requests', {
     isBinary: integer('is_binary', { mode: 'boolean' }).notNull(),
     clientIp: text('client_ip').notNull(),
     remoteIp: text('remote_ip').notNull(),
+    bodyPath: text('body_path'), // Relative path to body file (nullable)
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (table) => [
     index('request_token_idx').on(table.tokenId),
     index('request_session_idx').on(table.sessionId),
     index('request_created_idx').on(table.createdAt), // For cleanup based on TTL
-])
-
-export const requestBodies = sqliteTable('request_bodies', {
-    requestId: integer('request_id').primaryKey().references(() => requests.id, { onDelete: 'cascade' }),
-    filePath: text('file_path').notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-}, (table) => [
-    index('request_body_created_idx').on(table.createdAt),
 ])
 
 export const keyValueStore = sqliteTable('key_value_store', {

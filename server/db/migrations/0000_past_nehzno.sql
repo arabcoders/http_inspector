@@ -5,16 +5,8 @@ CREATE TABLE `key_value_store` (
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `request_bodies` (
-	`request_id` integer PRIMARY KEY NOT NULL,
-	`file_path` text NOT NULL,
-	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
-	FOREIGN KEY (`request_id`) REFERENCES `requests`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `request_body_created_idx` ON `request_bodies` (`created_at`);--> statement-breakpoint
 CREATE TABLE `requests` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`id` text PRIMARY KEY NOT NULL,
 	`token_id` text NOT NULL,
 	`session_id` text NOT NULL,
 	`method` text NOT NULL,
@@ -25,6 +17,7 @@ CREATE TABLE `requests` (
 	`is_binary` integer NOT NULL,
 	`client_ip` text NOT NULL,
 	`remote_ip` text NOT NULL,
+	`body_path` text,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	FOREIGN KEY (`token_id`) REFERENCES `tokens`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE cascade
@@ -45,6 +38,7 @@ CREATE INDEX `friendly_id_idx` ON `sessions` (`friendly_id`);--> statement-break
 CREATE INDEX `last_accessed_idx` ON `sessions` (`last_accessed_at`);--> statement-breakpoint
 CREATE TABLE `tokens` (
 	`id` text PRIMARY KEY NOT NULL,
+	`token` text NOT NULL,
 	`session_id` text NOT NULL,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	`response_enabled` integer DEFAULT false NOT NULL,
@@ -54,5 +48,7 @@ CREATE TABLE `tokens` (
 	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `tokens_token_unique` ON `tokens` (`token`);--> statement-breakpoint
+CREATE INDEX `token_token_idx` ON `tokens` (`token`);--> statement-breakpoint
 CREATE INDEX `token_session_idx` ON `tokens` (`session_id`);--> statement-breakpoint
 CREATE INDEX `token_created_idx` ON `tokens` (`created_at`);

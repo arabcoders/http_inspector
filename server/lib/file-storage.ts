@@ -50,8 +50,11 @@ export const useFileStorage = (path: string | undefined = undefined) => {
      * @returns Sanitized string safe for filesystem use
      */
     const sanitizePathComponent = (component: string): string => {
+        // Ensure we have a string
+        const str = String(component)
+        
         // Remove null bytes, path traversal sequences, newlines, and other dangerous chars
-        return component
+        return str
             .replace(/\0/g, '')     // Null bytes
             .replace(/\n/g, '')     // Line feeds (LF)
             .replace(/\r/g, '')     // Carriage returns (CR)
@@ -65,18 +68,18 @@ export const useFileStorage = (path: string | undefined = undefined) => {
     /**
      * Generate file path for a request body
      * 
-     * @param sessionId - Session ID
-     * @param tokenId - Token ID  
-     * @param requestId - Request ID
+     * @param sessionId - Session ID (UUID)
+     * @param tokenId - Token ID (user-visible token string)
+     * @param requestId - Request ID (UUID)
      * 
      * @returns Absolute file path (validated)
      */
-    const generatePath = (sessionId: string, tokenId: string, requestId: number): string => {
+    const generatePath = (sessionId: string, tokenId: string, requestId: string): string => {
         const storageDir = getStorageDir()
 
         const safeSessionId = sanitizePathComponent(sessionId)
         const safeTokenId = sanitizePathComponent(tokenId)
-        const safeRequestId = String(Math.abs(Math.floor(requestId)))
+        const safeRequestId = sanitizePathComponent(requestId)
 
         const filePath = join(storageDir, safeSessionId, safeTokenId, `${safeRequestId}.bin`)
 
@@ -134,9 +137,9 @@ export const useFileStorage = (path: string | undefined = undefined) => {
     /**
      * Save request body to disk
      * 
-     * @param sessionId - Session ID
-     * @param tokenId - Token ID
-     * @param requestId - Request ID
+     * @param sessionId - Session ID (UUID)
+     * @param tokenId - Token ID (user-visible token string)
+     * @param requestId - Request ID (UUID)
      * @param body - Request body buffer
      * 
      * @returns Relative file path (relative to storage dir)
@@ -144,7 +147,7 @@ export const useFileStorage = (path: string | undefined = undefined) => {
     const save = async (
         sessionId: string,
         tokenId: string,
-        requestId: number,
+        requestId: string,
         body: Buffer
     ): Promise<string> => {
         const filePath = generatePath(sessionId, tokenId, requestId)

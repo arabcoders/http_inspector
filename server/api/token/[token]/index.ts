@@ -6,7 +6,7 @@ import { useServerEvents } from '~~/server/lib/events'
 export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   const sessionId = await getOrCreateSession(event)
   const method = event.node.req.method?.toUpperCase() || 'GET'
-  const tokenId = event.context.params?.token
+  const tokenString = event.context.params?.token
   const events = useServerEvents()
   const db = useDatabase()
 
@@ -14,18 +14,18 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     throw createError({ statusCode: 405, message: 'Method not allowed' })
   }
 
-  if (!tokenId) {
+  if (!tokenString) {
     throw createError({ statusCode: 400, message: 'Token ID is required' })
   }
 
-  const token = await db.tokens.get(sessionId, tokenId)
+  const token = await db.tokens.get(sessionId, tokenString)
   if (!token) {
     throw createError({ statusCode: 404, message: 'Token not found' })
   }
 
   if ('DELETE' === method) {
-    await db.tokens._delete(sessionId, tokenId)
-    events.publish(sessionId, 'token.deleted', { token: { id: tokenId } })
+    await db.tokens._delete(sessionId, tokenString)
+    events.publish(sessionId, 'token.deleted', { token: { id: token.id, token: tokenString } })
     return { ok: true }
   }
 
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     const headers = (payload.headers as unknown) as Record<string, string> | null
     const responseBody = (payload.body as unknown) as string | null
 
-    await db.tokens.update(sessionId, tokenId, {
+    await db.tokens.update(sessionId, tokenString, {
       responseEnabled: enabled,
       responseStatus: status,
       responseHeaders: headers ? JSON.stringify(headers) : null,
@@ -46,7 +46,8 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
 
     events.publish(sessionId, 'token.response.updated', {
       token: {
-        id: tokenId,
+        id: token.id,
+        token: tokenString,
         responseEnabled: enabled,
         responseStatus: status
       }

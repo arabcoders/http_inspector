@@ -1,6 +1,6 @@
 import { getDb } from '../db'
-import { sessions, tokens, requests, requestBodies } from '../db/schema'
-import { lt, sql } from 'drizzle-orm'
+import { sessions, tokens, requests } from '../db/schema'
+import { lt, sql, isNotNull } from 'drizzle-orm'
 import { useFileStorage } from './file-storage'
 
 // TTL values (in days)
@@ -23,21 +23,18 @@ export const cleanupExpiredData = async () => {
 
   // Delete old request body files first (before deleting request records)
   const oldRequestsWithBodies = await db
-    .select({
-      requestId: requestBodies.requestId,
-      filePath: requestBodies.filePath,
-    })
-    .from(requestBodies)
-    .innerJoin(requests, sql`${requests.id} = ${requestBodies.requestId}`)
-    .where(lt(requests.createdAt, requestCutoff))
+    .select({ id: requests.id, bodyPath: requests.bodyPath })
+    .from(requests)
+    .where(sql`${lt(requests.createdAt, requestCutoff)} AND ${isNotNull(requests.bodyPath)}`)
 
   console.debug(`Found ${oldRequestsWithBodies.length} old request bodies to delete`)
 
   for (const record of oldRequestsWithBodies) {
-    await storage.delete(record.filePath)
+    if (record.bodyPath) {
+      await storage.delete(record.bodyPath)
+    }
   }
 
-  // Delete old requests (oldest first to free up space)
   const deletedRequests = await db
     .delete(requests)
     .where(lt(requests.createdAt, requestCutoff))
@@ -45,7 +42,6 @@ export const cleanupExpiredData = async () => {
 
   console.debug(`Deleted ${deletedRequests.length} old requests`)
 
-  // Delete old tokens (cascade will not delete requests as they were already handled)
   const deletedTokens = await db
     .delete(tokens)
     .where(lt(tokens.createdAt, tokenCutoff))
@@ -53,7 +49,6 @@ export const cleanupExpiredData = async () => {
 
   console.debug(`Deleted ${deletedTokens.length} old tokens`)
 
-  // Delete old sessions based on lastAccessedAt (cascade will delete associated tokens and requests)
   const deletedSessions = await db
     .delete(sessions)
     .where(lt(sessions.lastAccessedAt, sessionCutoff))

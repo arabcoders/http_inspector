@@ -3,11 +3,12 @@ import { useFileStorage } from '../../server/lib/file-storage'
 import { existsSync } from 'fs'
 import { rm } from 'fs/promises'
 import { join } from 'path'
+import { randomUUID } from 'crypto'
 
 describe('file-storage', () => {
-  const testSessionId = 'test-session-123'
+  const testSessionId = randomUUID()
   const testTokenId = 'test-token-456'
-  const testRequestId = 789
+  const testRequestId = randomUUID()
   
   let storage: ReturnType<typeof useFileStorage>
   
@@ -89,8 +90,8 @@ describe('file-storage', () => {
       const body1 = Buffer.from('body 1')
       const body2 = Buffer.from('body 2')
       
-      await storage.save(testSessionId, testTokenId, 1, body1)
-      await storage.save(testSessionId, testTokenId, 2, body2)
+      await storage.save(testSessionId, testTokenId, randomUUID(), body1)
+      await storage.save(testSessionId, testTokenId, randomUUID(), body2)
 
       const tokenDir = join(storage.getStorageDir(), testSessionId, testTokenId)
       expect(existsSync(tokenDir)).toBe(true)
@@ -105,8 +106,8 @@ describe('file-storage', () => {
       const body1 = Buffer.from('body 1')
       const body2 = Buffer.from('body 2')
       
-      await storage.save(testSessionId, 'token-1', 1, body1)
-      await storage.save(testSessionId, 'token-2', 2, body2)
+      await storage.save(testSessionId, 'token-1', randomUUID(), body1)
+      await storage.save(testSessionId, 'token-2', randomUUID(), body2)
 
       const sessionDir = join(storage.getStorageDir(), testSessionId)
       expect(existsSync(sessionDir)).toBe(true)
@@ -118,10 +119,11 @@ describe('file-storage', () => {
 
   describe('generatePath', () => {
     it('should generate correct file path', () => {
-      const filePath = storage.generatePath('session-123', 'token-456', 789)
+      const requestId = randomUUID()
+      const filePath = storage.generatePath('session-123', 'token-456', requestId)
       expect(filePath).toContain('session-123')
       expect(filePath).toContain('token-456')
-      expect(filePath).toContain('789.bin')
+      expect(filePath).toContain(`${requestId}.bin`)
     })
   })
 })

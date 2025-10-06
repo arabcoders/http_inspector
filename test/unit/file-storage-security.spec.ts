@@ -196,7 +196,7 @@ describe('file-storage security', () => {
         })
 
         it('should handle standard request IDs correctly', async () => {
-            const requestIds = [1, 100, 999999, 0]
+            const requestIds = ['uuid-1', 'uuid-100', 'uuid-999999', 'uuid-0']
 
             for (const id of requestIds) {
                 const filePath = storage.generatePath(testSessionId, testTokenId, id)
@@ -204,12 +204,11 @@ describe('file-storage security', () => {
             }
         })
 
-        it('should handle negative request IDs safely', async () => {
-            // Should convert to absolute value
-            const filePath = storage.generatePath(testSessionId, testTokenId, -123)
+        it('should handle request IDs with special chars safely', async () => {
+            // Should sanitize special characters
+            const filePath = storage.generatePath(testSessionId, testTokenId, 'test-uuid-123')
             const fileName = filePath.split('/').pop() || ''
-            expect(fileName).toBe('123.bin')
-            expect(fileName).not.toContain('-')
+            expect(fileName).toBe('test-uuid-123.bin')
         })
     })
 
