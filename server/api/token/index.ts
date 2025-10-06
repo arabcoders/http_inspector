@@ -1,26 +1,28 @@
 import { defineEventHandler, createError } from 'h3'
-import { getUserTokens, createToken, deleteAllTokens } from '~~/server/lib/redis-db'
+import { useDatabase } from '~~/server/lib/db'
 import { getOrCreateSession } from '~~/server/lib/session'
-import { publishGlobal } from '~~/server/lib/events'
+import { useServerEvents } from '~~/server/lib/events'
 
 export default defineEventHandler(async (event) => {
   const sessionId = await getOrCreateSession(event)
   const method = event.node.req.method?.toUpperCase() || 'GET'
+  const events = useServerEvents()
+  const db = useDatabase()
 
   if (method === 'GET') {
-    const tokens = await getUserTokens(sessionId)
+    const tokens = await db.tokens.list(sessionId)
     return tokens
   }
 
   if (method === 'POST') {
-    const token = await createToken(sessionId)
-    publishGlobal(sessionId, { type: 'token.created', token: { id: token.id, createdAt: token.createdAt } })
+    const token = await db.tokens.create(sessionId)
+    events.publish(sessionId, 'token.created', { token: { id: token.id, createdAt: token.createdAt } })
     return { id: token.id }
   }
 
   if (method === 'DELETE') {
-    await deleteAllTokens(sessionId)
-    publishGlobal(sessionId, { type: 'token.cleared' })
+    await db.tokens.deleteAll(sessionId)
+    events.publish(sessionId, 'token.cleared', {})
     return { ok: true }
   }
 

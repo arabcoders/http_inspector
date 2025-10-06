@@ -11,9 +11,16 @@
           </span>
         </div>
         <div class="flex items-center gap-1">
-          <UTooltip :text="canCopyRaw ? 'Copy raw request' : 'Raw request not loaded'" :shortcuts="[]">
+          <UTooltip v-if="request && !isBinary" :text="canCopyRaw ? 'Copy raw request' : 'Raw request not loaded'">
             <UButton :disabled="!canCopyRaw" size="xs" variant="ghost" color="neutral" icon="i-lucide-copy"
               @click.stop="handleCopyRaw" />
+          </UTooltip>
+
+          <UTooltip v-if="request" text="Download raw request">
+            <ULink type="button" variant="ghost" color="neutral" size="xs" role="button"
+              :href="`/api/token/${tokenId}/requests/${request?.id}/raw`" target="_blank">
+              <UIcon name="i-lucide-download" size="xs" class="h-4 w-4" />
+            </ULink>
           </UTooltip>
           <UIcon :name="isOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
             class="h-5 w-5 text-gray-500 dark:text-gray-400" />
@@ -27,9 +34,10 @@
         <div v-if="!request" class="flex h-32 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
           Select a request to view its raw payload.
         </div>
-        <div v-else-if="isBinary" class="p-4 text-sm text-gray-500 dark:text-gray-400">
-          <UIcon name="i-lucide-alert-circle" class="h-5 w-5 mr-2 inline-block" />
-          Raw preview disabled for binary bodies.
+        <div v-else-if="isBinary" 
+                class="flex h-40 flex-col items-center justify-center gap-2 p-4 text-sm text-gray-500 dark:text-gray-400">
+          <UIcon name="i-lucide-alert-circle" class="h-6 w-6" />
+          <span>Preview disabled for binary content.</span>
         </div>
         <div v-else-if="rawLoading"
           class="flex h-32 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -38,7 +46,7 @@
         <CodeHighlight v-else-if="rawValue" :code="rawValue" language="http" />
         <div v-else class="p-4 text-sm text-gray-500 dark:text-gray-400">
           <UIcon name="i-lucide-alert-circle" class="h-5 w-5 mr-2 inline-block" />
-          Raw body unavailable.
+          Raw request unavailable.
         </div>
       </div>
     </div>
@@ -50,9 +58,9 @@ import { ref, computed, watch } from 'vue'
 import { copyText } from '~/utils'
 import CodeHighlight from '~/components/CodeHighlight.vue'
 import { notify } from '~/composables/useNotificationBridge'
+import type { RequestSummary } from '~~/shared/types'
 
-type RequestSummary = { id: number, method: string, isBinary?: boolean, }
-const props = defineProps<{ request: RequestSummary | null, tokenId: string }>()
+const props = defineProps<{ request: RequestSummary | null, requestNumber: number | null, tokenId: string }>()
 
 const isOpen = usePersistedState('raw-request-open', false)
 const rawValue = ref<string | null>(null)
@@ -65,20 +73,20 @@ const summary = computed(() => {
   if (!props.request) {
     return 'Select a request to inspect the raw payload.'
   }
-  return `#${props.request.id} · ${props.request.method}`
+  return `#${props.requestNumber} · ${props.request.method}`
 })
 
-watch([() => props.request?.id, isOpen], async ([requestId, open]) => {
+watch([() => props.request?.id, isOpen], async ([requestId, open]: [string | undefined, boolean]) => {
   if (!requestId || !open || isBinary.value) {
     return
   }
 
-  await loadRaw(requestId as number)
+  await loadRaw(requestId)
 }, { immediate: false })
 
 watch(() => props.request?.id, () => rawValue.value = null)
 
-const loadRaw = async (requestId: number) => {
+const loadRaw = async (requestId: string) => {
   rawLoading.value = true
   try {
     const res = await fetch(`/api/token/${props.tokenId}/requests/${requestId}/raw`)

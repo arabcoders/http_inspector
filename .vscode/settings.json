@@ -17,6 +17,7 @@
     ],
     "cSpell.words": [
         "autoresize",
+        "detc",
         "fastly",
         "heroicons",
         "hgetall",
@@ -30,6 +31,7 @@
         "smembers",
         "sqlmap",
         "srem",
+        "unixepoch",
         "Whois"
     ]
 }

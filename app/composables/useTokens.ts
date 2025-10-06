@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import type { TokenListItem } from '~~/shared/types'
 
 type FetchFn = (url: string, init?: RequestInit) => Promise<unknown>
 
@@ -13,11 +14,11 @@ export const useTokens = (opts?: { fetchFn?: FetchFn }) => {
     }
   })
 
-  const tokens = ref<Array<{ id: string; createdAt?: string }>>([])
+  const tokens = ref<TokenListItem[]>([])
 
   const loadTokens = async () => {
     const res = await fetchFn('/api/token')
-    tokens.value = (res || []) as Array<{ id: string; createdAt?: string }>
+    tokens.value = (res || []) as TokenListItem[]
   }
 
   const createToken = async () => {

@@ -1,95 +1,97 @@
-import { nanoid } from 'nanoid'
-import { getRedisClient, KEYS, TTL } from './redis'
+import { randomUUID } from 'crypto'
+import { getDb } from '../db'
+import { sessions } from '../db/schema'
+import type { Session } from '~~/shared/types'
 import type { H3Event } from 'h3'
 import { getCookie, setCookie } from 'h3'
 import { generateUniqueFriendlyId, isValidFriendlyId } from './friendly-id'
+import { eq } from 'drizzle-orm'
 
-const SESSION_COOKIE_NAME = 'http_inspector_session'
-
-export type Session = {
-  id: string
-  friendlyId: string
-  createdAt: string
-  lastAccessedAt: string
-}
+const SESSION_COOKIE_NAME = 'session'
+const SESSION_MAX_AGE = 30 * 24 * 60 * 60 // 30 days in seconds
 
 export const getOrCreateSession = async (event: H3Event): Promise<string> => {
   const existingSessionId = getCookie(event, SESSION_COOKIE_NAME)
 
   if (existingSessionId) {
-    const redis = getRedisClient()
-    const sessionExists = await redis.exists(KEYS.session(existingSessionId))
+    const db = getDb()
+    const result = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, existingSessionId))
+      .limit(1)
 
-    if (sessionExists) {
-      await redis.hset(KEYS.session(existingSessionId), 'lastAccessedAt', new Date().toISOString())
-      await redis.expire(KEYS.session(existingSessionId), TTL.SESSION)
-      return existingSessionId
+    if (result.length) {
+      // Update last accessed time
+      await db
+        .update(sessions)
+        .set({ lastAccessedAt: new Date() })
+        .where(eq(sessions.id, existingSessionId))
+
+      return result[0].id
     }
   }
 
-  const sessionId = nanoid()
-  const redis = getRedisClient()
-  const now = new Date().toISOString()
+  // Create new session
+  const id = randomUUID()
+  const db = getDb()
+  const now = new Date()
 
-  const friendlyId = await generateUniqueFriendlyId(async id => {
-    return 1 === (await redis.exists(KEYS.friendlyIdLookup(id)))
+  const friendlyId = await generateUniqueFriendlyId(async friendlyIdCandidate => {
+    const result = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.friendlyId, friendlyIdCandidate))
+      .limit(1)
+    return result.length > 0
   })
 
-  await redis.hset(KEYS.session(sessionId), {
-    id: sessionId,
+  await db.insert(sessions).values({
+    id,
     friendlyId,
     createdAt: now,
     lastAccessedAt: now,
   })
 
-  await redis.setex(KEYS.friendlyIdLookup(friendlyId), TTL.SESSION, sessionId)
-  await redis.expire(KEYS.session(sessionId), TTL.SESSION)
-  setCookie(event, SESSION_COOKIE_NAME, sessionId, {
+  setCookie(event, SESSION_COOKIE_NAME, id, {
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: TTL.SESSION,
+    maxAge: SESSION_MAX_AGE,
     path: '/',
   })
 
-  return sessionId
+  return id
 }
 
 export const getSessionFromCookie = (event: H3Event): string | null => {
   return getCookie(event, SESSION_COOKIE_NAME) || null
 }
 
-export const setSession = async (event: H3Event, sessionIdOrFriendly: string): Promise<boolean> => {
-  const redis = getRedisClient()
+export const setSession = async (event: H3Event, friendlyId: string): Promise<boolean> => {
+  const db = getDb()
 
-  let sessionId = sessionIdOrFriendly
-
-  if (true === isValidFriendlyId(sessionIdOrFriendly)) {
-    // Look up technical session ID
-    const technicalId = await redis.get(KEYS.friendlyIdLookup(sessionIdOrFriendly))
-    if (!technicalId) {
-      return false
-    }
-    sessionId = technicalId
-  }
-
-  const sessionExists = await redis.exists(KEYS.session(sessionId))
-
-  if (!sessionExists) {
+  if (false === isValidFriendlyId(friendlyId)) {
     return false
   }
 
-  await redis.hset(KEYS.session(sessionId), 'lastAccessedAt', new Date().toISOString())
-  await redis.expire(KEYS.session(sessionId), TTL.SESSION)
+  const result = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(eq(sessions.friendlyId, friendlyId))
+    .limit(1)
 
-  const sessionData = await redis.hgetall(KEYS.session(sessionId))
-  if (sessionData.friendlyId) {
-    await redis.expire(KEYS.friendlyIdLookup(sessionData.friendlyId), TTL.SESSION)
+  if (!result.length) {
+    return false
   }
+
+  const sessionId = result[0].id
+
+  await db.update(sessions).set({ lastAccessedAt: new Date() }).where(eq(sessions.id, sessionId))
 
   setCookie(event, SESSION_COOKIE_NAME, sessionId, {
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: TTL.SESSION,
+    maxAge: SESSION_MAX_AGE,
     path: '/',
   })
 
@@ -97,35 +99,30 @@ export const setSession = async (event: H3Event, sessionIdOrFriendly: string): P
 }
 
 export const getSession = async (sessionId: string): Promise<Session | null> => {
-  const redis = getRedisClient()
-  const data = await redis.hgetall(KEYS.session(sessionId))
+  const db = getDb()
 
-  if (!data.id) {
-    return null
-  }
+  const result = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1)
 
-  return {
-    id: data.id,
-    friendlyId: data.friendlyId || 'unknown',
-    createdAt: data.createdAt,
-    lastAccessedAt: data.lastAccessedAt,
-  }
+  return result.length ? result[0] : null
 }
 
-export const deleteSession = async (event: H3Event, sessionId: string): Promise<void> => {
-  const redis = getRedisClient()
+export const deleteSession = async (event: H3Event): Promise<void> => {
+  const cookieSessionId = getCookie(event, SESSION_COOKIE_NAME)
 
-  const sessionData = await redis.hgetall(KEYS.session(sessionId))
-
-  if (sessionData.friendlyId) {
-    await redis.del(KEYS.friendlyIdLookup(sessionData.friendlyId))
+  if (!cookieSessionId) {
+    return
   }
 
-  await redis.del(KEYS.session(sessionId))
+  const db = getDb()
 
+  // The cookie contains the session id (UUID)
+  await db.delete(sessions).where(eq(sessions.id, cookieSessionId))
+
+  // Clear the cookie
   setCookie(event, SESSION_COOKIE_NAME, '', {
-    maxAge: 0,
+    httpOnly: true,
     sameSite: 'lax',
+    maxAge: 0,
     path: '/',
   })
 }

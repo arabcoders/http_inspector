@@ -2,7 +2,7 @@ import { TextDecoder } from 'util'
 
 const textDecoder = new TextDecoder('utf-8', { fatal: false })
 
-export function isTextContentType(contentType: string | null | undefined): boolean {
+export const isTextContentType = (contentType: string | null | undefined): boolean => {
   if (!contentType) {
     return false
   }
@@ -10,7 +10,7 @@ export function isTextContentType(contentType: string | null | undefined): boole
   return (lower.startsWith('text/') || lower.includes('json') || lower.includes('xml') || lower.includes('html') || lower.includes('form-urlencoded'))
 }
 
-export function extractContentType(headers: Record<string, unknown> | null | undefined): string | null {
+export const extractContentType = (headers: Record<string, unknown> | null | undefined): string | null => {
   if (!headers) {
     return null
   }
@@ -27,16 +27,21 @@ export function extractContentType(headers: Record<string, unknown> | null | und
 
 const allowedControlCodes = new Set([9, 10, 13])
 
-export function detectBinaryBody(body: Uint8Array | null | undefined, contentType: string | null | undefined): boolean {
+export const detectBinaryBody = (body: Uint8Array | null | undefined, contentType: string | null | undefined): boolean => {
   if (!body || body.length === 0) {
     return false
   }
 
   for (let i = 0; i < body.length; i += 1) {
     const byte = body[i]
-    if (byte === 0) {
+    if (!byte) {
+      continue
+    }
+
+    if (0 === byte) {
       return true
     }
+
     if (byte < 32 && !allowedControlCodes.has(byte)) {
       return true
     }
@@ -64,5 +69,5 @@ export function detectBinaryBody(body: Uint8Array | null | undefined, contentTyp
     }
   }
 
-  return !isTextContentType(contentType) && controlCount > 0
+  return false === isTextContentType(contentType) && controlCount > 0
 }

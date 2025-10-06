@@ -1,3 +1,7 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 @plugin "@tailwindcss/typography";
+
+.prose code:not(pre > code) {
+    @apply bg-gray-100 dark:bg-gray-800 before:content-none after:content-none px-1.5 py-1 rounded-sm whitespace-break-spaces
+}

@@ -8,7 +8,8 @@
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       ]" :requests="requests" :selected-request-id="selectedRequestId" :incoming-ids="incomingIds"
         :copy-state="copyState" show-mobile-close @close="closeSidebar" @select="handleSelectRequest"
-        @copy-url="copyPayloadURL" @clear="showClearModal = true" />
+        @copy-url="copyPayloadURL" @clear="showClearModal = true" @ingest="showIngestModal = true"
+        @delete="handleDeleteRequest" />
 
       <ClientOnly>
         <main class="flex-1 overflow-y-auto bg-background">
@@ -17,17 +18,23 @@
               Requests
             </UButton>
             <UBadge v-if="selectedRequest" size="sm">
-              {{ selectedRequest.id }}
+              #{{ selectedRequestNumber }}
             </UBadge>
-            <UButton type="button" variant="soft" color="error" icon="i-lucide-trash-2" :disabled="!requests.length"
-              @click="showClearModal = true">
-              Clear All
-            </UButton>
+            <div class="flex gap-2">
+              <UButton type="button" variant="soft" color="primary" icon="i-lucide-upload"
+                @click="showIngestModal = true">
+                Ingest
+              </UButton>
+              <UButton type="button" variant="soft" color="error" icon="i-lucide-trash-2" :disabled="!requests.length"
+                @click="showClearModal = true">
+                Clear
+              </UButton>
+            </div>
           </div>
           <div class="grid gap-6 px-6 pb-6 lg:p-6">
             <ResponseSettingsCard :token-id="tokenId" />
-            <RawRequestCard :request="selectedRequest" :token-id="tokenId" />
-            <RequestDetailsCard :request="selectedRequest" :token-id="tokenId" />
+            <RawRequestCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
+            <RequestDetailsCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
           </div>
         </main>
       </ClientOnly>
@@ -36,6 +43,8 @@
     <ConfirmModal v-model="showClearModal" title="Clear All Requests"
       description="Are you sure you want to delete all requests for this token? This action cannot be undone."
       confirm-label="Clear All" @confirm="handleClearRequests" />
+
+    <IngestRequestModal v-model="showIngestModal" :token-id="tokenId" @success="handleIngestSuccess" />
   </div>
 </template>
 
@@ -43,44 +52,38 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
-import type { ClientEventPayload } from '~/composables/useClientEvents'
+import { useSSE } from '~/composables/useSSE'
+import type { SSEEventPayload, RequestSummary } from '~~/shared/types'
 import { notify } from '~/composables/useNotificationBridge'
 import RequestSidebar from '~/components/RequestSidebar.vue'
 import ResponseSettingsCard from '~/components/token/ResponseSettingsCard.vue'
 import RequestDetailsCard from '~/components/token/RequestDetailsCard.vue'
 import RawRequestCard from '~/components/token/RawRequestCard.vue'
+import IngestRequestModal from '~/components/IngestRequestModal.vue'
 import { copyText } from '~/utils'
 
 const route = useRoute()
 
 const tokenId = computed(() => String(route.params.id || ''))
 
-type RequestSummary = {
-  id: number
-  tokenId: string
-  method: string
-  headers: string
-  url: string
-  body?: string | null
-  contentType?: string
-  isBinary: boolean
-  clientIp?: string
-  remoteIp?: string
-  createdAt: string
-}
-
 const requests = ref<RequestSummary[]>([])
-const selectedRequestId = ref<number | null>(null)
-const incomingIds = ref<Set<number>>(new Set())
+const selectedRequestId = ref<string | null>(null)
+const incomingIds = ref<Set<string>>(new Set())
 const copyState = ref<'idle' | 'copied'>('idle')
 const showClearModal = ref(false)
+const showIngestModal = ref(false)
 const isSidebarOpen = useState<boolean>('token-request-sidebar-open', () => false)
 const tokenExists = ref(false)
 
-const latestRequestIdRef = ref<number | null>(null)
-const selectedRequestIdRef = ref<number | null>(null)
+const latestRequestIdRef = ref<string | null>(null)
+const selectedRequestIdRef = ref<string | null>(null)
 
 const selectedRequest = computed(() => requests.value.find(r => r.id === selectedRequestId.value) || null)
+const selectedRequestNumber = computed(() => {
+  if (!selectedRequest.value) return null
+  const index = requests.value.findIndex(r => r.id === selectedRequest.value!.id)
+  return index !== -1 ? requests.value.length - index : null
+})
 watch(requests, n => latestRequestIdRef.value = n.length && n[0] ? n[0].id : null)
 
 watch(selectedRequestId, async newId => {
@@ -92,10 +95,9 @@ watch(selectedRequestId, async newId => {
 
   const basePath = `/token/${tokenId.value}`
 
-  if (typeof newId === 'number') {
-    const newIdStr = newId.toString()
-    if (route.query.request !== newIdStr) {
-      const nextQuery: LocationQueryRaw = { ...route.query, request: newIdStr }
+  if (typeof newId === 'string') {
+    if (route.query.request !== newId) {
+      const nextQuery: LocationQueryRaw = { ...route.query, request: newId }
       await navigateTo({ path: basePath, query: nextQuery }, { replace: true })
     }
   } else if (route.query.request) {
@@ -128,8 +130,8 @@ const loadRequests = async () => {
     // Check for request query parameter
     const requestIdParam = route.query.request
     if (requestIdParam) {
-      const requestId = Number(requestIdParam)
-      if (!isNaN(requestId) && data.some(r => r.id === requestId)) {
+      const requestId = String(requestIdParam)
+      if (data.some(r => r.id === requestId)) {
         selectedRequestId.value = requestId
         return
       }
@@ -148,12 +150,34 @@ const loadRequests = async () => {
   }
 }
 
-const handleSelectRequest = async (id: number) => {
+const handleSelectRequest = async (id: string) => {
   selectedRequestId.value = id
   closeSidebar()
   if (incomingIds.value.has(id)) {
     incomingIds.value.delete(id)
     incomingIds.value = new Set(incomingIds.value)
+  }
+}
+
+const handleDeleteRequest = async (id: string) => {
+  try {
+    const res = await fetch(`/api/token/${tokenId.value}/requests/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      requests.value = requests.value.filter(r => r.id !== id)
+
+      // If the deleted request was selected, clear selection or select next
+      if (selectedRequestId.value === id) {
+        const firstRequest = requests.value.length > 0 ? requests.value[0] : null
+        selectedRequestId.value = firstRequest ? firstRequest.id : null
+      }
+
+      notify({ title: 'Request deleted', variant: 'success' })
+    } else {
+      throw new Error('Failed to delete request')
+    }
+  } catch (error) {
+    console.error('Failed to delete request:', error)
+    notify({ title: 'Failed to delete request', variant: 'error' })
   }
 }
 
@@ -187,10 +211,11 @@ const handleClearRequests = async () => {
   }
 }
 
+const handleIngestSuccess = async () => await loadRequests()
 const openSidebar = () => isSidebarOpen.value = true
 const closeSidebar = () => isSidebarOpen.value = false
 
-const handleClientEvent = (payload: ClientEventPayload) => {
+const handleClientEvent = (payload: SSEEventPayload) => {
   if (payload.token !== tokenId.value) {
     return
   }
@@ -223,9 +248,13 @@ const handleClientEvent = (payload: ClientEventPayload) => {
         }, 3000)
       }
 
+      // Calculate request number: requests are in reverse order (newest first)
+      const index = requests.value.findIndex(r => r.id === incoming.id)
+      const requestNumber = index !== -1 ? requests.value.length - index : requests.value.length
+
       notify({
         title: `Request ${incoming.method}`,
-        description: `Captured #${incoming.id}`,
+        description: `Captured #${requestNumber}`,
         color: 'success',
         actions: [{
           label: 'View',
@@ -243,9 +272,10 @@ const handleClientEvent = (payload: ClientEventPayload) => {
     }
 
     case 'request.deleted': {
-      if (typeof payload.requestId !== 'number') {
+      if (typeof payload.requestId !== 'string') {
         break
       }
+      console.log('Deleting request with ID:', payload.requestId, requests.value.map(r => r.id))
 
       requests.value = requests.value.filter(r => r.id !== payload.requestId)
 
@@ -281,7 +311,7 @@ let unsubscribe: (() => void) | null = null
 onMounted(async () => {
   isSidebarOpen.value = false
   await loadRequests()
-  unsubscribe = useGlobalEventBus().on('sse:event', handleClientEvent)
+  unsubscribe = useSSE().onAny(handleClientEvent)
 })
 
 onUnmounted(() => {

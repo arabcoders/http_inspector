@@ -70,6 +70,16 @@
                     "url": "https://tailwindcss.com/docs/functions-and-directives#plugin"
                 }
             ]
+        },
+        {
+            "name": "@config",
+            "description": "Use the `@config` directive to specify a custom path to your Tailwind CSS configuration file. This is useful when your configuration file is not located at the default path (`tailwind.config.js`).\n```css\n@config './path/to/your/tailwind.config.js';\n```\n",
+            "references": [
+                {
+                    "name": "Tailwind Documentation",
+                    "url": "https://tailwindcss.com/docs/functions-and-directives#config"
+                }
+            ]
         }
     ]
 }

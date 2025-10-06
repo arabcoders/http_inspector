@@ -4,19 +4,12 @@
  * Users can toggle their preference which is persisted in localStorage
  */
 
-export type NotificationVariant = 'default' | 'success' | 'error' | 'warning' | 'info'
-export type NotificationType = 'toast' | 'browser'
-export type ToastColor = 'success' | 'error' | 'warning' | 'info' | 'neutral' | 'primary' | 'secondary'
-
-export interface NotificationPayload {
-    title: string
-    description?: string
-    variant?: NotificationVariant
-    color?: ToastColor
-    icon?: string
-    timeout?: number
-    actions?: { label: string; onClick: () => void }[]
-}
+import type {
+    NotificationVariant,
+    NotificationType,
+    ToastColor,
+    NotificationPayload
+} from '~~/shared/types'
 
 /**
  * Maps notification variants to appropriate icons

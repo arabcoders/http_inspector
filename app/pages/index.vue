@@ -5,9 +5,9 @@
       <div v-if="isSidebarOpen" class="fixed inset-0 z-30 backdrop-blur-sm bg-black/40 transition-opacity lg:hidden"
         @click="closeSidebar" />
 
-      <TokenSidebar :tokens="sortedTokens" :request-counts="requestCounts" :is-open="isSidebarOpen"
-        :show-mobile-close="true" @create="create" @delete-all="showDeleteAllModal = true" @delete="deleteToken"
-        @copy-url="copyPayloadURL" @close="closeSidebar" />
+      <TokenSidebar :tokens="sortedTokens" :request-counts="requestCounts" :incoming-token-ids="incomingTokenIds"
+        :is-open="isSidebarOpen" :show-mobile-close="true" @create="create" @delete-all="showDeleteAllModal = true"
+        @delete="deleteToken" @copy-url="copyPayloadURL" @close="closeSidebar" />
 
       <main class="flex-1 overflow-auto">
         <div class="mb-4 flex items-center justify-between lg:hidden">
@@ -43,16 +43,16 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed, ref } from 'vue'
 import { marked } from 'marked'
-import type { ClientEventPayload } from '~/composables/useClientEvents'
+import { useSSE } from '~/composables/useSSE'
 import { useTokens } from '~/composables/useTokens'
 import { copyText } from '~/utils'
 import { notify } from '~/composables/useNotificationBridge'
-
-type Token = { id: string; createdAt?: string; _count?: { requests?: number } }
+import type { TokenListItem, SSEEventPayload } from '~~/shared/types'
 
 const { tokens, loadTokens, createToken, clearTokens } = useTokens()
 
 const requestCounts = ref<Map<string, number>>(new Map())
+const incomingTokenIds = ref<Set<string>>(new Set())
 const showDeleteAllModal = ref(false)
 const showDeleteTokenModal = ref(false)
 const tokenToDelete = ref<string | null>(null)
@@ -62,7 +62,7 @@ const isSidebarOpen = ref(false)
 const openSidebar = () => isSidebarOpen.value = true
 const closeSidebar = () => isSidebarOpen.value = false
 
-const sortedTokens = computed(() => (tokens.value || []).slice().sort((a: Token, b: Token) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()))
+const sortedTokens = computed(() => (tokens.value || []).slice().sort((a: TokenListItem, b: TokenListItem) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()))
 const create = async () => await createToken()
 
 const confirmDeleteAll = async () => {
@@ -106,8 +106,8 @@ const deleteToken = (id: string) => {
   showDeleteTokenModal.value = true
 }
 
-const handleClientEvent = (payload: ClientEventPayload) => {
-  const tokenId = payload.token
+const handleClientEvent = (payload: SSEEventPayload): void => {
+  const tokenId = payload.token as string
 
   switch (payload.type) {
     case 'token.created': {
@@ -117,10 +117,10 @@ const handleClientEvent = (payload: ClientEventPayload) => {
       if (rTokenId) {
         notify({
           title: 'Token created',
-          description: `Click to view token ${rTokenId}`,
+          description: `Click to view token ${shortSlug(rTokenId)}`,
           color: 'success',
           actions: [{
-            label: 'View',
+            label: 'View Token',
             onClick: async () => { await navigateTo(`/token/${rTokenId}`) },
           }],
         })
@@ -141,17 +141,29 @@ const handleClientEvent = (payload: ClientEventPayload) => {
         return
       }
 
-      const token = (tokens.value as Token[] | undefined)?.find(t => t.id === tokenId)
+      const token = (tokens.value as TokenListItem[] | undefined)?.find(t => t.id === tokenId)
       const currentCount = requestCounts.value.get(tokenId) ?? (token?._count?.requests ?? 0)
       requestCounts.value.set(tokenId, currentCount + 1)
 
+      // Add to incoming tokens set
+      if (!incomingTokenIds.value.has(tokenId)) {
+        incomingTokenIds.value.add(tokenId)
+        incomingTokenIds.value = new Set(incomingTokenIds.value)
+
+        // Remove from incoming after 3 seconds
+        setTimeout(() => {
+          incomingTokenIds.value.delete(tokenId)
+          incomingTokenIds.value = new Set(incomingTokenIds.value)
+        }, 3000)
+      }
+
       const request = payload.request as { id?: number; method?: string } | undefined
       notify({
-        title: `${request?.method || 'Request'} → ${tokenId}`,
-        description: `Click to view request #${request?.id || ''}`,
+        title: `${request?.method || 'Request'} → ${shortSlug(tokenId)}`,
+        description: `Click to view`,
         color: 'success',
         actions: [{
-          label: 'View',
+          label: 'View Request',
           onClick: async () => { await navigateTo(`/token/${tokenId}`) },
         }],
       })
@@ -189,14 +201,14 @@ onMounted(async () => {
 
   readmeContent.value = await marked.parse(await $fetch<string>('/api/readme'))
 
-  const tokenList = tokens.value as Token[] | undefined
-  tokenList?.forEach((token: Token) => {
+  const tokenList = tokens.value as TokenListItem[] | undefined
+  tokenList?.forEach((token: TokenListItem) => {
     if (token._count?.requests !== undefined) {
       requestCounts.value.set(token.id, token._count.requests)
     }
   })
 
-  unsubscribe = useGlobalEventBus().on('sse:event', handleClientEvent)
+  unsubscribe = useSSE().onAny(handleClientEvent)
 })
 
 onUnmounted(() => {

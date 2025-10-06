@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import createH3Event from '../utils/createH3Event'
 import type { H3Event } from 'h3'
-import { subscribeToToken, unsubscribeFromToken } from '../../server/lib/events'
+import { useServerEvents } from '../../server/lib/events'
 
 // Partial mock of h3 to control readBody during the test. We keep the real
 // h3 exports otherwise by importing the actual module and overriding readBody.
@@ -29,17 +29,41 @@ const insertRequestMock = vi.fn(async (
     method,
     headers: JSON.stringify(headers || {}),
     url,
+    contentType: headers['content-type'] || 'application/octet-stream',
+    contentLength: _body ? _body.length : 0,
+    isBinary: false,
     remoteIp,
     clientIp,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(),
   }
 })
 
-vi.mock('~~/server/lib/redis-db', () => ({
-  getToken: vi.fn(async (id: string) => ({ id, responseEnabled: false, responseStatus: 200, responseHeaders: null, responseBody: null })),
-  getSessionIdForToken: vi.fn(async () => 'session-123'),
-  insertRequest: insertRequestMock,
-  listRequestsForToken: vi.fn(async (tokenId: string) => [{ id: 123, tokenId, method: 'POST', headers: '{}', url: `/api/${tokenId}`, createdAt: new Date() }]),
+vi.mock('~~/server/lib/db', () => ({
+  useDatabase: vi.fn(() => ({
+    tokens: {
+      get: vi.fn(async (sessionId: string, id: string) => ({ 
+        id, 
+        sessionId,
+        createdAt: new Date(),
+        responseEnabled: false, 
+        responseStatus: 200, 
+        responseHeaders: null, 
+        responseBody: null 
+      })),
+      getSessionId: vi.fn(async () => 'session-123'),
+    },
+    requests: {
+      create: insertRequestMock,
+      list: vi.fn(async (tokenId: string) => [{ 
+        id: 123, 
+        tokenId, 
+        method: 'POST', 
+        headers: '{}', 
+        url: `/api/${tokenId}`, 
+        createdAt: new Date() 
+      }]),
+    },
+  })),
 }))
 
 describe('integration: payload -> events -> db (handler-level)', () => {
@@ -52,10 +76,11 @@ describe('integration: payload -> events -> db (handler-level)', () => {
   const handler = (await import('../../server/api/payload/[token].ts')).default as (event: H3Event) => Promise<unknown>
 
     const tokenId = 'test-token'
+    const events = useServerEvents()
 
     const received: string[] = []
     const sub = { id: 'sub-1', send: (data: string) => received.push(data) }
-    subscribeToToken(tokenId, sub)
+    const unsubscribe = events.subscribeToToken(tokenId, sub)
 
     const event = createH3Event({
       node: {
@@ -63,6 +88,10 @@ describe('integration: payload -> events -> db (handler-level)', () => {
           method: 'POST',
           headers: { 'content-type': 'text/plain' },
           url: `/api/payload/${tokenId}`,
+        },
+        res: {
+          statusCode: 0,
+          end: () => {},
         },
       },
       context: { params: { token: tokenId } },
@@ -85,6 +114,6 @@ describe('integration: payload -> events -> db (handler-level)', () => {
     expect(parsed.request.tokenId).toBe(tokenId)
 
     // cleanup
-    unsubscribeFromToken(tokenId, 'sub-1')
+    unsubscribe()
   })
 })

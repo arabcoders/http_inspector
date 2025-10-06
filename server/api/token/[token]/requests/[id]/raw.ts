@@ -1,88 +1,91 @@
-import { defineEventHandler, createError } from 'h3'
-import { getRequestFull, getToken } from '~~/server/lib/redis-db'
+import { defineEventHandler, createError, type H3Event, type EventHandlerRequest, setResponseHeader, getQuery } from 'h3'
+import { useDatabase } from '~~/server/lib/db'
 import { getOrCreateSession } from '~~/server/lib/session'
-import { detectBinaryBody, extractContentType } from '~~/shared/content'
+import { parseHeaders, capitalizeHeader } from '~~/server/lib/utils'
 
-function parseHeaders(raw: string): Record<string, unknown> {
-  try {
-    return JSON.parse(raw) as Record<string, unknown>
-  } catch {
-    return {}
-  }
-}
-
-function capitalizeHeader(header: string): string {
-  return header
-    .split('-')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join('-')
-}
-
-export default defineEventHandler(async event => {
+export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   const sessionId = await getOrCreateSession(event)
   type EventParams = { params?: Record<string, string> }
   const ctx = (event.context as unknown as EventParams) || {}
   const params = ctx.params || {}
-  const id = Number(params.id)
+  const id = params.id
   const tokenId = params.token
+  const query = getQuery(event)
+  const db = useDatabase()
 
   if (!tokenId) {
-    throw createError({
-      statusCode: 400,
-      message: 'Token ID is required'
-    })
+    throw createError({ statusCode: 400, message: 'Token ID is required' })
   }
 
-  if (Number.isNaN(id)) {
-    throw createError({
-      statusCode: 400,
-      message: 'Invalid request ID'
-    })
+  if (!id) {
+    throw createError({ statusCode: 400, message: 'Invalid request ID' })
   }
 
-  // Check if token exists
-  const token = await getToken(sessionId, tokenId)
+  const token = await db.tokens.get(sessionId, tokenId)
   if (!token) {
-    throw createError({
-      statusCode: 404,
-      message: 'Token not found'
-    })
+    throw createError({ statusCode: 404, message: 'Token not found' })
   }
 
-  const row = await getRequestFull(sessionId, tokenId, id)
+  const row = await db.requests.get(sessionId, tokenId, id)
   if (!row) {
-    throw createError({
-      statusCode: 404,
-      message: 'Request not found'
-    })
+    throw createError({ statusCode: 404, message: 'Request not found' })
   }
 
   const headers = parseHeaders(row.headers as string)
-  const contentType = row.contentType ?? extractContentType(headers)
-  const bodyBuffer = row.body ? Buffer.from(row.body as Uint8Array) : null
-  const isBinary = row.isBinary ?? detectBinaryBody(bodyBuffer ?? undefined, contentType)
-
-  if (isBinary) {
-    throw createError({
-      statusCode: 400,
-      message: 'Cannot display binary content as text'
-    })
-  }
+  const isBinary = row.isBinary ?? false
 
   const url = row.url || '/'
   const method = row.method || 'GET'
 
-  // Construct full URL with protocol and host for tools like sqlmap
-  const host = headers.host || headers.Host || 'localhost'
-  const protocol = headers['x-forwarded-proto'] || 'http'
-  const fullUrl = `${protocol}://${host}${url}`
+  let fullUrl = url
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    const host = headers.host || headers.Host || 'localhost'
+    const protocol = headers['x-forwarded-proto'] || 'http'
+    fullUrl = `${protocol}://${host}${url}`
+  }
 
   const statusLine = `${method} ${process.env.RAW_FULL_URL ? fullUrl : url} HTTP/1.1`
-  const headerLines = Object.entries(headers)
-    .map(([key, value]) => `${capitalizeHeader(key)}: ${String(value)}`)
-    .join('\r\n')
-  const body = bodyBuffer ? bodyBuffer.toString('utf8') : ''
+  const headerLines = Object.entries(headers).map(
+    ([key, value]) => `${capitalizeHeader(key)}: ${String(value)}`
+  ).join('\r\n')
 
-  event.node.res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-  return `${statusLine}\r\n${headerLines}${headerLines ? '\r\n' : ''}\r\n${body}`
+  setResponseHeader(event, 'Content-Type', 'text/plain; charset=utf-8')
+
+  const filename = `r-${tokenId}-${id}-raw.http`
+  const disposition = (isBinary || 'true' === query.download || '1' === query.download) ? 'attachment' : 'inline'
+  setResponseHeader(event, 'Content-Disposition', `${disposition}; filename="${filename}"`)
+
+  const httpHeader = `${statusLine}\r\n${headerLines}${headerLines ? '\r\n' : ''}\r\n`
+
+  return new Promise<void>((resolve, reject) => {
+    const res = event.node.res
+
+    res.write(httpHeader, 'utf8', err => {
+      if (err) {
+        reject(err)
+        return
+      }
+
+      if (0 === row.contentLength) {
+        res.end()
+        resolve()
+        return
+      }
+
+      db.requests.streamBody(sessionId, tokenId, id).then(bodyStream => {
+        if (!bodyStream) {
+          res.end()
+          resolve()
+          return
+        }
+
+        bodyStream.stream.on('error', (streamErr: Error) => reject(streamErr))
+        bodyStream.stream.on('end', () => {
+          res.end()
+          resolve()
+        })
+        bodyStream.stream.pipe(res, { end: false })
+      }).catch(reject)
+    })
+  })
 })

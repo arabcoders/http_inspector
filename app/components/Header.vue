@@ -3,19 +3,24 @@
         class="sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur">
         <div class="container mx-auto px-4 py-4">
             <div class="flex items-center justify-between gap-4">
-                <ULink to="/" class="flex items-center gap-3 text-lg font-semibold">
-                    <span
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-purple-500 text-white shadow-lg">
-                        <UIcon name="i-lucide-webhook" class="h-5 w-5" />
-                    </span>
-                    <span class="flex items-center gap-3">
-                        HTTP Inspector
-                        <code v-if="selectedToken"
-                            class="hidden sm:inline-block rounded bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-mono text-gray-900 dark:text-gray-100">
-                            /api/payload/{{ shortSlug(selectedToken) }}
-                        </code>
-                    </span>
-                </ULink>
+                <div class="flex items-center gap-3">
+                    <ULink to="/" class="flex items-center gap-3 text-lg font-semibold">
+                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-full">
+                            <img src="/favicon.svg" class="h-6 w-6" alt="Logo">
+                        </span>
+                        <span>HTTP Inspector</span>
+                    </ULink>
+                    <ClientOnly>
+                        <SSEStatusIndicator />
+                    </ClientOnly>
+                    <UTooltip v-if="selectedToken" text="Copy Payload URL">
+                        <code
+                            class="hidden select-none cursor-pointer sm:inline-block rounded bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-mono text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                            @click="copyPayloadUrl">
+                        /api/payload/{{ shortSlug(selectedToken) }}
+                    </code>
+                    </UTooltip>
+                </div>
 
                 <div class="flex items-center gap-3">
                     <ClientOnly>
@@ -80,9 +85,8 @@
             </Transition>
         </div>
 
-        <ConfirmModal v-model="showDeleteModal" title="Delete Token"
-            description="Are you sure you want to delete this token and all its requests? This action cannot be undone."
-            confirm-label="Delete" :loading="isDeleting" @confirm="confirmDelete" />
+        <ConfirmModal v-model="showDeleteModal" title="Delete Token" confirm-label="Delete" :loading="isDeleting"
+            description="Delete token and all it's associated requests?" @confirm="confirmDelete" />
 
         <RestoreSessionModal v-if="sessionRestoreEnabled" v-model="showRestoreModal" />
     </header>
@@ -92,8 +96,8 @@
 import { computed, watch, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTokens } from '~/composables/useTokens'
-import { useGlobalEventBus } from '~/composables/useGlobalEventBus'
-import type { ClientEventPayload } from '~/composables/useClientEvents'
+import { useSSE } from '~/composables/useSSE'
+import type { SSEEventPayload } from '~~/shared/types'
 import { notify } from '~/composables/useNotificationBridge'
 import { copyText, shortSlug } from '~/utils'
 
@@ -102,7 +106,7 @@ const colorMode = useColorMode()
 const runtimeConfig = useRuntimeConfig()
 
 const { tokens, loadTokens, deleteToken: removeToken } = useTokens()
-const eventBus = useGlobalEventBus()
+const sse = useSSE()
 
 const sessionRestoreEnabled = runtimeConfig.public?.sessionRestoreEnabled !== false
 
@@ -160,6 +164,25 @@ const copySessionId = async () => {
     }
 }
 
+const copyPayloadUrl = async () => {
+    if (!selectedToken.value) {
+        return
+    }
+
+    const origin = 'undefined' !== typeof window ? window.location.origin : ''
+    const url = `${origin}/api/payload/${selectedToken.value}`
+
+    try {
+        if (false === (await copyText(url))) {
+            return
+        }
+
+        notify({ title: 'Payload URL Copied', description: url, color: 'success' })
+    } catch (err) {
+        console.error('Failed to copy:', err)
+    }
+}
+
 const isTokenPage = computed(() => route.path.startsWith('/token/'))
 
 const hasMobileExtras = computed(() => Boolean(sessionInfo.value) || isTokenPage.value)
@@ -196,7 +219,7 @@ watch([isTokenPage, hasMobileExtras], ([tokenPage, mobileExtras]) => {
     }
 })
 
-function handleClientEvent(payload: ClientEventPayload) {
+function handleClientEvent(payload: SSEEventPayload) {
     if (!payload?.type) {
         return
     }
@@ -208,14 +231,21 @@ function handleClientEvent(payload: ClientEventPayload) {
     loadTokens()
 }
 
+let unsubscribe: (() => void) | null = null
+
 onMounted(async () => {
     await loadTokens()
     await loadSessionInfo()
     await checkAuthStatus()
-    eventBus.on('sse:event', handleClientEvent)
+    unsubscribe = sse.onAny(handleClientEvent)
 })
 
-onUnmounted(() => eventBus.off('sse:event', handleClientEvent))
+onUnmounted(() => {
+    if (unsubscribe) {
+        unsubscribe()
+        unsubscribe = null
+    }
+})
 
 const toggleTheme = () => {
     colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
@@ -234,7 +264,7 @@ const handleLogout = async () => {
             color: 'success',
         })
 
-        useGlobalEventBus().emit('auth:changed')
+        sse.emit({ type: 'auth:changed' })
         await navigateTo('/login')
     } catch (error) {
         console.error('Logout failed:', error)

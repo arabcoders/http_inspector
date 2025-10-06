@@ -11,7 +11,11 @@
     "test": "pnpm test:unit",
     "lint": "eslint --ext .js,.ts,.vue .",
     "test:unit": "vitest run --config=vitest.config.ts",
-    "test:integration": "vitest run --config=vitest.config.ts"
+    "test:integration": "vitest run --config=vitest.config.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx server/db/migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "db:cleanup": "tsx server/lib/cleanup.ts"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.68",
@@ -21,9 +25,10 @@
     "@tailwindcss/postcss": "^4.1.14",
     "@tailwindcss/vite": "^4.1.14",
     "@types/jsonwebtoken": "^9.0.10",
+    "better-sqlite3": "^12.4.1",
+    "drizzle-orm": "^0.44.6",
     "eslint": "^9.36.0",
     "h3": "^1.15.4",
-    "ioredis": "^5.8.0",
     "jsonwebtoken": "^9.0.2",
     "marked": "^16.3.0",
     "nanoid": "^5.1.6",
@@ -37,8 +42,10 @@
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.6.1",
-    "@vueuse/core": "^13.9.0",
+    "drizzle-kit": "^0.31.5",
+    "tsx": "^4.20.6",
     "vitest": "^3.2.4"
   }
 }

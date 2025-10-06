@@ -1,12 +1,4 @@
 services:
-  http_redis:
-    image: redis:latest
-    container_name: http_redis
-    command: redis-server
-    volumes:
-      - redis-data:/data
-    restart: unless-stopped
-
   http_inspector:
     image: ghcr.io/arabcoders/http_inspector:latest
     build: .
@@ -14,16 +6,21 @@ services:
     restart: unless-stopped
     ports:
       - "3001:3000"
+    volumes:
+      - http_inspector_data:/config
     environment:
-      - REDIS_URL=redis://http_redis:6379
-    depends_on:
-      - http_redis
+      - TRUST_PROXY_CLIENT_IP=false
+      # - STORAGE_PATH=/config/
+      # - SESSION_TTL_DAYS=30
+      # - TOKEN_TTL_DAYS=30
+      # - REQUEST_TTL_DAYS=7
+      # - CLEANUP_ENABLED=true
+      # - CLEANUP_ON_STARTUP=true
+      # - CLEANUP_INTERVAL_HOURS=1
+      # - AUTH_USERNAME=admin
+      # - AUTH_PASSWORD=secret
+      # - SESSION_RESTORE_ENABLED=true
+      # - RAW_FULL_URL=false
 
 volumes:
-  redis-data:
-    driver: local
-    driver_opts:
-      type: none
-      device: ./var/data
-      o: bind
-      
+  http_inspector_data:

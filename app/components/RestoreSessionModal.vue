@@ -10,17 +10,11 @@
     <template #body>
       <div class="space-y-4">
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          Enter your session ID to restore your tokens and requests. You can use either:
+          Enter your session ID to restore your tokens and requests.
         </p>
-
-        <ul class="text-sm text-gray-600 dark:text-gray-400 list-disc list-inside space-y-1">
-          <li><strong>Friendly ID:</strong> e.g., <code
-              class="bg-gray-100 dark:bg-gray-800 px-1 rounded">famous-amethyst-panda</code></li>
-          <li><strong>Technical ID:</strong> The long alphanumeric code</li>
-        </ul>
-
+        
         <div class="space-y-2">
-          <label for="session-id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label for="session-id" class="block font-bold text-sm text-gray-700 dark:text-gray-300">
             Session ID
           </label>
           <UInput id="session-id" v-model="sessionId" placeholder="famous-amethyst-panda" size="lg" class="w-full"

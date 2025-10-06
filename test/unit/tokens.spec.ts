@@ -3,10 +3,22 @@ import createH3Event from '../utils/createH3Event'
 import type { TestH3Event } from '../utils/createH3Event'
 import handler from '../../server/api/token/index'
 
-vi.mock('~~/server/lib/redis-db', () => ({
-  getUserTokens: vi.fn(async () => []),
-  createToken: vi.fn(async () => ({ id: 'abc123', createdAt: new Date().toISOString() })),
-  deleteAllTokens: vi.fn(async () => ({})),
+vi.mock('~~/server/lib/db', () => ({
+  useDatabase: vi.fn(() => ({
+    tokens: {
+      list: vi.fn(async () => []),
+      create: vi.fn(async () => ({ 
+        id: 'abc123', 
+        sessionId: 'session-123',
+        createdAt: new Date(),
+        responseEnabled: false,
+        responseStatus: 200,
+        responseHeaders: null,
+        responseBody: null,
+      })),
+      deleteAll: vi.fn(async () => ({})),
+    },
+  })),
 }))
 
 vi.mock('~~/server/lib/session', () => ({
@@ -14,7 +26,15 @@ vi.mock('~~/server/lib/session', () => ({
 }))
 
 vi.mock('~~/server/lib/events', () => ({
-  publishGlobal: vi.fn(),
+  useServerEvents: vi.fn(() => ({
+    publish: vi.fn(),
+    subscribeToSession: vi.fn(() => vi.fn()),
+    subscribeToToken: vi.fn(() => vi.fn()),
+    getSubscriberCount: vi.fn(() => 0),
+    getActiveChannels: vi.fn(() => []),
+    getTotalSubscribers: vi.fn(() => 0),
+    __clearAll: vi.fn(),
+  })),
 }))
 
 describe('tokens api', () => {

@@ -28,7 +28,7 @@ const highlightCode = async () => {
 
   try {
     const theme = colorMode.value === 'dark' ? 'github-dark' : 'github-light'
-    const lang = (props.language as BundledLanguage) || 'auto'
+    const lang = (props.language as BundledLanguage) || 'text'
     highlightedCode.value = await codeToHtml(props.code, { lang, theme })
   } catch (err) {
     console.error('Failed to highlight code:', err)

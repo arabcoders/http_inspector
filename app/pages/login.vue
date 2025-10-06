@@ -48,7 +48,8 @@
                             icon="i-lucide-lock" />
                     </div>
 
-                    <UButton type="submit" color="primary" size="lg" block :loading="loading" :disabled="!username || !password">
+                    <UButton type="submit" color="primary" size="lg" block :loading="loading"
+                        :disabled="!username || !password">
                         {{ loading ? 'Signing in...' : 'Sign in' }}
                     </UButton>
                 </form>
@@ -60,6 +61,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { notify } from '~/composables/useNotificationBridge'
+import { useSSE } from '~/composables/useSSE'
 
 definePageMeta({ layout: false, middleware: [] })
 
@@ -102,10 +104,7 @@ const handleLogin = async () => {
     try {
         await $fetch('/api/auth/login', {
             method: 'POST',
-            body: {
-                username: username.value,
-                password: password.value
-            }
+            body: { username: username.value, password: password.value }
         })
 
         notify({
@@ -114,11 +113,8 @@ const handleLogin = async () => {
             color: 'success'
         })
 
-        // Emit auth change event to reconnect SSE
-        const eventBus = useGlobalEventBus()
-        eventBus.emit('auth:changed')
+        useSSE().emit({ type: 'auth:changed' })
 
-        // Redirect to returnUrl or home
         const returnUrl = route.query.returnUrl as string || '/'
         await navigateTo(returnUrl)
     } catch (err: unknown) {

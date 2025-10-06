@@ -1,73 +1,13 @@
-import type { EventHandlerRequest, H3Event } from 'h3';
-import { readRawBody, defineEventHandler } from 'h3'
-import type { Token } from '~~/server/lib/redis-db'
-import { getToken, insertRequest, getSessionIdForToken } from '~~/server/lib/redis-db'
-import { publish, publishGlobal } from '~~/server/lib/events'
+import { readRawBody, defineEventHandler, type H3Event, type EventHandlerRequest } from 'h3'
+import { useDatabase } from '~~/server/lib/db'
+import type { Token } from '~~/shared/types'
+import { ingestRequest } from '~~/server/lib/request-ingestion'
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD',
   'Access-Control-Allow-Headers': '*',
   'Access-Control-Expose-Headers': '*',
-}
-
-const selectFirstIp = (input?: string | null) => {
-  if (!input) {
-    return null
-  }
-
-  for (const part of input.split(',')) {
-    const candidate = part.trim()
-    if (candidate) {
-      return candidate
-    }
-  }
-  return null
-}
-
-const extractFromForwarded = (forwarded?: string | null) => {
-  if (!forwarded) {
-    return null
-  }
-  for (const segment of forwarded.split(',')) {
-    const trimmed = segment.trim()
-    const match = /for=([^;]+)/i.exec(trimmed)
-    if (match?.[1]) {
-      const cleaned = match[1].replace(/["[\]]/g, '').trim()
-      if (cleaned) {
-        return cleaned
-      }
-    }
-  }
-  return null
-}
-
-function determineClientIp(headers: Record<string, string>) {
-  const forwardedFor = selectFirstIp(headers['x-forwarded-for'])
-  if (forwardedFor) {
-    return forwardedFor
-  }
-
-  const realIp = headers['x-real-ip'] || headers['x-client-ip'] || headers['true-client-ip']
-  if (realIp) {
-    return realIp
-  }
-
-  const cfIp = headers['cf-connecting-ip'] || headers['fastly-client-ip']
-  if (cfIp) {
-    return cfIp
-  }
-
-  const forwarded = extractFromForwarded(headers['forwarded'])
-  if (forwarded) {
-    return forwarded
-  }
-
-  const vercelIp = headers['x-vercel-forwarded-for']
-  if (vercelIp) {
-    return selectFirstIp(vercelIp)
-  }
-  return null
 }
 
 const buildResponse = async (tokenRow: Token | null, allowBody = true) => {
@@ -104,8 +44,10 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   type EventContextParams = { params?: Record<string, string> }
   const ctx = (event.context as unknown as EventContextParams) || {}
   const params = ctx.params || {}
-  const token = params.token as string | undefined
-  if (!token) {
+  const tokenId = params.token as string | undefined
+  const db = useDatabase()
+  
+  if (!tokenId) {
     event.node.res.statusCode = 404
     event.node.res.end('not found')
     return
@@ -131,7 +73,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     return
   }
 
-  const sessionId = await getSessionIdForToken(token)
+  const sessionId = await db.tokens.getSessionId(tokenId)
 
   if (!sessionId) {
     event.node.res.statusCode = 404
@@ -139,41 +81,38 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     return
   }
 
-  const tokenRow = await getToken(sessionId, token)
+  const userToken = await db.tokens.get(sessionId, tokenId)
 
-  if (!tokenRow) {
+  if (!userToken) {
     event.node.res.statusCode = 404
     event.node.res.end()
     return
   }
 
   let buf: Buffer | null = null
-  try {
-    const body = await readRawBody(event, false)
-    if (body) {
-      buf = Buffer.isBuffer(body) ? body : Buffer.from(body)
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    try {
+      const body = await readRawBody(event, false)
+      if (body) {
+        buf = Buffer.isBuffer(body) ? body : Buffer.from(body)
+      }
+    } catch (err) {
+      console.warn('failed to read body', err)
     }
-  } catch (err) {
-    console.warn('failed to read body', err)
   }
 
-  const remoteIp = process.env.TRUST_PROXY_CLIENT_IP === 'true' ? determineClientIp(headersObj) : event.node.req.socket.remoteAddress
-
-  const created = await insertRequest(
+  // Ingest the request and publish events
+  await ingestRequest(
     sessionId,
-    token,
+    userToken.id,
     method,
     headersObj,
     buf,
-    event.node.req.url || '/api/payload/' + token,
-    event.node.req.socket.remoteAddress || '127.0.0.1',
-    remoteIp || event.node.req.socket.remoteAddress || '127.0.0.1'
+    event.node.req.url || '/api/payload/' + tokenId,
+    event.node.req.socket.remoteAddress || '127.0.0.1'
   )
 
-  publish(token, { type: 'request.received', request: created })
-  publishGlobal(sessionId, { type: 'request.received', token, request: created })
-
-  const resp = await buildResponse(tokenRow)
+  const resp = await buildResponse(userToken)
 
   for (const [k, v] of Object.entries(CORS_HEADERS)) {
     event.node.res.setHeader(k, v)

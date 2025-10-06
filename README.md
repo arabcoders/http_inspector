@@ -4,7 +4,7 @@ HTTP Inspector is a self-hosted debugging console for capturing, inspecting, and
 
 ## Capabilities
 - Create disposable endpoints with session-scoped isolation
-- Capture every HTTP method with full headers, bodies, metadata, and binary payloads
+- Capture every HTTP method with full headers, bodies, metadata
 - Configure per-endpoint default responses: status codes, headers, and body templates
 - Stream live activity through Server-Sent Events for dashboards or automation
 - Restore previous sessions with friendly IDs for persistent debugging workflows
@@ -12,74 +12,66 @@ HTTP Inspector is a self-hosted debugging console for capturing, inspecting, and
 - Expire sessions, tokens, and stored requests automatically using configurable TTLs
 - Export or download raw requests for view/use in other tools.
 
-## Run with Containers
+## Running the container
 
 ### Docker/Podman `run`
-Both Docker and Podman work with the same flags; substitute `podman` for `docker` if you prefer Podman. The example below starts Redis and the inspector in a shared network and publishes the UI on port 3001.
+Both Docker and Podman work with the same flags; substitute `podman` for `docker` if you prefer Podman. The example below starts the inspector with a persistent volume for the SQLite database and publishes the UI on port 3001.
 
 ```bash
-docker network create http_inspector_net
-docker run -d --name http_redis --network http_inspector_net redis:7-alpine
 docker run -d \
   --name http_inspector \
-  --network http_inspector_net \
   -p 3001:3000 \
-  -e REDIS_URL=redis://http_redis:6379 \
+  -v http_inspector_data:/config \
   ghcr.io/arabcoders/http_inspector:latest
 ```
 
-Stop the stack with `docker rm -f http_inspector http_redis` (or `podman rm -f …`).
-
-### Docker Compose / Podman Compose
+### Compose
 
 ```yaml
 services:
-  http_redis:
-    image: redis:latest
-    container_name: http_redis
-    command: redis-server
-    volumes:
-      - redis-data:/data
-    restart: unless-stopped
-
   http_inspector:
     image: ghcr.io/arabcoders/http_inspector:latest
-    build: .
     container_name: http_inspector
     restart: unless-stopped
     ports:
       - "3001:3000"
+    volumes:
+      - http_inspector_data:/config
     environment:
-      - REDIS_URL=redis://http_redis:6379
-    depends_on:
-      - http_redis
+      - TRUST_PROXY_CLIENT_IP=false # Set to true if running behind a trusted proxy
 
 volumes:
-  redis-data:
+  http_inspector_data:
 ```
 
-Use the provided `compose.yaml` to launch both services together from the repository root.
+Use the provided `compose.yaml` to launch the service from the repository root.
 
 ```bash
 docker compose up -d
 # podman compose up -d
 ```
 
-The UI is available at http://localhost:3001 and containers persist until you run `docker compose down` (or `podman compose down`).
+The UI is available at http://localhost:3001 and the container persists until you run `docker compose down` (or `podman compose down`).
+
+> ![NOTE]
+> The default container run using the root user for simplicity. For production deployments, consider running as a non-root user by adding `user: "1000:1000"` (or similar) to the Compose service definition or Docker run command. 
 
 ## Environment Variables
 
-| Variable                    | Required | Default                    | Description                                                   |
-| --------------------------- | -------- | -------------------------- | ------------------------------------------------------------- |
-| **REDIS_URL**               | Yes      | **redis://localhost:6379** | Redis connection string                                       |
-| **SESSION_TTL_DAYS**        | No       | **30**                     | Session lifetime in days before automatic cleanup             |
-| **TOKEN_TTL_DAYS**          | No       | **30**                     | Token lifetime in days before automatic cleanup               |
-| **REQUEST_TTL_DAYS**        | No       | **7**                      | Request history lifetime in days                              |
-| **TRUST_PROXY_CLIENT_IP**   | No       | *false*                    | Honor **X-Forwarded-For** when running behind a trusted proxy |
-| **AUTH_USERNAME**           | No       | **-**                      | Username required for login when authentication is enabled    |
-| **AUTH_PASSWORD**           | No       | **-**                      | Password required for login when authentication is enabled    |
-| **SESSION_RESTORE_ENABLED** | No       | **true**                   | Enable restoring previous sessions by friendly ID             |
-| **RAW_FULL_URL**            | No       | **false**                  | Include full URL in raw request output                        |
+| Variable                    | Required | Default                   | Description                                                    |
+| --------------------------- | -------- | ------------------------- | -------------------------------------------------------------- |
+| **STORAGE_PATH**            | No       | **/config** or **./var)** | Path for storing db and request bodies                         |
+| **SESSION_TTL_DAYS**        | No       | **30**                    | Session lifetime in days before automatic cleanup              |
+| **TOKEN_TTL_DAYS**          | No       | **30**                    | Token lifetime in days before automatic cleanup                |
+| **REQUEST_TTL_DAYS**        | No       | **7**                     | Request history lifetime in days                               |
+| **CLEANUP_ENABLED**         | No       | **true**                  | Enable automatic cleanup of expired data                       |
+| **CLEANUP_ON_STARTUP**      | No       | **true**                  | Run cleanup when server starts (in addition to scheduled runs) |
+| **CLEANUP_INTERVAL_HOURS**  | No       | **1**                     | How often to run cleanup (in hours)                            |
+| **TRUST_PROXY_CLIENT_IP**   | No       | **false**                 | Honor **X-Forwarded-For** when running behind a trusted proxy  |
+| **AUTH_USERNAME**           | No       | **-**                     | Username required for login when authentication is enabled     |
+| **AUTH_PASSWORD**           | No       | **-**                     | Password required for login when authentication is enabled     |
+| **SESSION_RESTORE_ENABLED** | No       | **true**                  | Enable restoring previous sessions by friendly ID              |
+| **RAW_FULL_URL**            | No       | **false**                 | Include full URL in raw request output                         |
 
 ## API Reference
 
@@ -90,9 +82,10 @@ Unless noted, endpoints require an authenticated session when authentication is 
 #### GET /api/session
 Returns the active session.
 
+**Response:**
 ```json
 {
-  "id": "random-string",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "friendlyId": "famous-amethyst-panda",
   "createdAt": "2025-01-15T10:30:00.000Z",
   "lastAccessedAt": "2025-01-15T10:30:00.000Z"
@@ -100,7 +93,7 @@ Returns the active session.
 ```
 
 #### POST /api/session/restore
-Restore a prior session by friendly or technical ID.
+Restore a prior session by its friendly ID.
 
 ```json
 {
@@ -115,62 +108,58 @@ Restore a prior session by friendly or technical ID.
 #### GET /api/token
 List tokens for the current session.
 
+**Response:**
 ```json
 [
   {
-    "id": "abc123",
+    "id": "550e8400-e29b-41d4-a716-446655440000",
     "createdAt": "2025-01-15T10:30:00.000Z",
-    "requestCount": 5,
-    "defaultStatusCode": 200,
-    "defaultHeaders": {},
-    "defaultBody": ""
+    "_count": {
+      "requests": 5
+    }
   }
 ]
 ```
 
 #### POST /api/token
-Create a token; optional `customId` makes the endpoint URL predictable.
-
-```json
-{
-  "customId": "optional-custom-id"
-}
-```
+Create a new token.
 
 **Response:**
 ```json
 {
-  "id": "abc123",
-  "createdAt": "2025-01-15T10:30:00.000Z",
-  "defaultStatusCode": 200
+  "id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
 #### GET /api/token/{tokenId}
 Retrieve token configuration.
 
+**Response:**
 ```json
 {
-  "id": "abc123",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "createdAt": "2025-01-15T10:30:00.000Z",
-  "defaultStatusCode": 200,
-  "defaultHeaders": {
+  "responseEnabled": true,
+  "responseStatus": 200,
+  "responseHeaders": {
     "Content-Type": "application/json"
   },
-  "defaultBody": "{\"status\": \"ok\"}"
+  "responseBody": "{\"status\": \"ok\"}"
 }
 ```
 
 #### PATCH /api/token/{tokenId}
-Update default response attributes.
+Update token response configuration.
 
+**Request Body:**
 ```json
 {
-  "defaultStatusCode": 204,
-  "defaultHeaders": {
+  "enabled": true,
+  "status": 204,
+  "headers": {
     "X-Request-Signature": "abc123"
   },
-  "defaultBody": "{\"processed\": true}"
+  "body": "{\"processed\": true}"
 }
 ```
 
@@ -186,21 +175,23 @@ Delete a token and its stored requests.
 #### GET /api/token/{tokenId}/requests
 List requests captured for a token.
 
+**Response:**
 ```json
 [
   {
-    "id": 1,
+    "id": "650e8400-e29b-41d4-a716-446655440000",
+    "tokenId": "550e8400-e29b-41d4-a716-446655440000",
+    "sessionId": "450e8400-e29b-41d4-a716-446655440000",
     "method": "POST",
-    "path": "/api/payload/abc123",
-    "query": "?status=success",
-    "headers": {
-      "content-type": "application/json",
-      "user-agent": "curl/7.79.1"
-    },
-    "ip": "192.168.1.100",
-    "timestamp": "2025-01-15T10:30:00.000Z",
-    "bodySize": 45,
-    "isBinary": false
+    "url": "/api/payload/550e8400-e29b-41d4-a716-446655440000?status=success",
+    "headers": "{\"content-type\":\"application/json\",\"user-agent\":\"curl/7.79.1\"}",
+    "contentType": "application/json",
+    "contentLength": 45,
+    "isBinary": false,
+    "clientIp": "192.168.1.100",
+    "remoteIp": "203.0.113.1",
+    "bodyPath": "450e8400-e29b-41d4-a716-446655440000/550e8400-e29b-41d4-a716-446655440000/1.bin",
+    "createdAt": "2025-01-15T10:30:00.000Z"
   }
 ]
 ```
@@ -208,19 +199,22 @@ List requests captured for a token.
 #### GET /api/token/{tokenId}/requests/{requestId}
 Fetch metadata for a specific request.
 
+**Response:**
 ```json
 {
-  "id": 1,
+  "id": "650e8400-e29b-41d4-a716-446655440000",
+  "tokenId": "550e8400-e29b-41d4-a716-446655440000",
+  "sessionId": "450e8400-e29b-41d4-a716-446655440000",
   "method": "POST",
-  "path": "/api/payload/abc123",
-  "query": "?status=success",
-  "headers": {
-    "content-type": "application/json"
-  },
-  "ip": "192.168.1.100",
-  "timestamp": "2025-01-15T10:30:00.000Z",
-  "bodySize": 45,
-  "isBinary": false
+  "url": "/api/payload/550e8400-e29b-41d4-a716-446655440000?status=success",
+  "headers": "{\"content-type\":\"application/json\"}",
+  "contentType": "application/json",
+  "contentLength": 45,
+  "isBinary": false,
+  "clientIp": "192.168.1.100",
+  "remoteIp": "203.0.113.1",
+  "bodyPath": "450e8400-e29b-41d4-a716-446655440000/550e8400-e29b-41d4-a716-446655440000/1.bin",
+  "createdAt": "2025-01-15T10:30:00.000Z"
 }
 ```
 
@@ -248,6 +242,53 @@ Delete a single stored request. **Response:** `{ "ok": true }`
 
 #### DELETE /api/token/{tokenId}/requests
 Delete all stored requests for a token. **Response:** `{ "ok": true }`
+
+#### POST /api/token/{tokenId}/ingest
+Manually ingest a raw HTTP request into the system.
+
+**Request Body:**
+```json
+{
+  "raw": "POST /api/webhook HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\n\r\n{\"event\":\"test\"}",
+  "clientIp": "192.168.1.100",
+  "remoteIp": "203.0.113.1"
+}
+```
+
+- `raw` (required): The raw HTTP request in standard HTTP/1.1 format. Supports both path-only URLs (`/api/test`) and full URLs (`http://example.com/api/test`)
+- `clientIp` (optional): Override the client IP address
+- `remoteIp` (optional): Override the remote IP address
+
+**Response:**
+```json
+{
+  "ok": true,
+  "request": {
+    "id": "650e8400-e29b-41d4-a716-446655440000",
+    "method": "POST",
+    "url": "/api/webhook",
+    "createdAt": "2025-01-15T10:30:00.000Z"
+  }
+}
+```
+
+**Example:**
+```bash
+# Ingest a previously exported raw request with path-only URL
+curl -X POST http://localhost:3000/api/token/your-token-id/ingest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "raw": "POST /api/data HTTP/1.1\r\nHost: api.example.com\r\nContent-Type: application/json\r\n\r\n{\"name\":\"test\"}",
+    "clientIp": "10.0.0.5"
+  }'
+
+# Ingest a request with full URL
+curl -X POST http://localhost:3000/api/token/your-token-id/ingest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "raw": "GET https://api.example.com/webhook?token=abc123 HTTP/1.1\r\nHost: api.example.com\r\nAuthorization: Bearer token\r\n\r\n"
+  }'
+```
 
 ### HTTP Capture Endpoint
 
@@ -300,21 +341,24 @@ eventSource.onmessage = (event) => {
 ```
 
 Events include:
-- `token:created`
-- `token:updated`
-- `token:deleted`
-- `request:new`
+- `request.received`
+- `request.deleted`
+- `request.cleared`
+- `token.created`
+- `token.deleted`
+- `token.cleared`
+- `token.response.updated`
 
 Event payload example:
 
 ```json
 {
-  "type": "request:new",
-  "token": "abc123",
+  "type": "request.received",
+  "token": "550e8400-e29b-41d4-a716-446655440000",
   "request": {
-    "id": 1,
+    "id": "650e8400-e29b-41d4-a716-446655440000",
     "method": "POST",
-    "timestamp": "2025-01-15T10:30:00.000Z"
+    "createdAt": "2025-01-15T10:30:00.000Z"
   }
 }
 ```

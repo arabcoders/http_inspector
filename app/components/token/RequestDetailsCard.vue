@@ -1,49 +1,55 @@
 <template>
   <UCard>
     <template #header>
-      <div class="flex flex-col gap-1">
-        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          Request details
-        </span>
-        <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
-          Inspect headers, query parameters, and the stored body.
-        </span>
-      </div>
+      <button type="button" class="w-full flex items-center justify-between text-left" @click="isOpen = !isOpen">
+        <div class="flex flex-col gap-1">
+          <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            Request details
+          </span>
+          <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
+            Inspect headers, query parameters, and the stored body.
+          </span>
+        </div>
+        <UIcon :name="isOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+          class="h-5 w-5 text-gray-500 dark:text-gray-400" />
+      </button>
     </template>
 
-    <div v-if="!request" class="p-8 text-center text-gray-500 dark:text-gray-400">
+    <div v-if="!request && isOpen" class="p-8 text-center text-gray-500 dark:text-gray-400">
       Select a request to view details.
     </div>
 
-    <div v-else class="space-y-6 p-4">
+    <div v-else-if="isOpen && request" class="space-y-6 p-4 border-t border-gray-200 dark:border-gray-700">
       <div class="flex flex-wrap items-center gap-3">
         <UBadge v-bind="getMethodBadgeProps(request.method)" class="uppercase tracking-wide" size="md">
           {{ request.method }}
         </UBadge>
 
-        <UBadge color="neutral" variant="outline" size="md">
-          #{{ request.id }}
+        <UBadge v-if="requestNumber" color="neutral" variant="outline" size="md">
+          #{{ requestNumber }}
         </UBadge>
 
         <template v-if="clientIp">
-          <UBadge color="neutral" variant="subtle" size="md" title="Click to copy client IP" role="button"
-            class="flex items-center gap-1 select-none cursor-pointer" @click="handleCopyIp">
-            <UIcon name="i-lucide-network" class="h-3 w-3" />
-            {{ clientIp }}
-          </UBadge>
+          <UTooltip text="Copy client IP">
+            <UBadge color="neutral" variant="subtle" size="md" role="button"
+              class="flex items-center gap-1 select-none cursor-pointer" @click="handleCopyIp">
+              <UIcon name="i-lucide-network" class="h-3 w-3" />
+              {{ clientIp }}
+            </UBadge>
+          </UTooltip>
           <ULink :to="`https://who.is/whois-ip/ip-address/${clientIp}`" external target="_blank"
             class="text-xs text-primary underline-offset-2 hover:underline">
             Whois
           </ULink>
         </template>
 
-        <template v-if="request.url">
+        <UTooltip v-if="request.url" text="Copy full request URL">
           <UBadge color="neutral" variant="subtle" size="sm" class="flex items-center gap-1 select-none cursor-pointer"
-            title="Copy full request URL" role="button" @click="handleCopyUrl">
+            role="button" @click="handleCopyUrl">
             <UIcon name="i-lucide-link" class="h-3 w-3" />
             {{ request.url }}
           </UBadge>
-        </template>
+        </UTooltip>
       </div>
 
       <div class="space-y-4">
@@ -146,7 +152,7 @@
         </div>
       </div>
 
-      <section>
+      <section v-if="request.contentLength > 0">
         <UCard>
           <template #header>
             <button type="button" class="w-full flex items-center justify-between text-left" @click="toggleBody">
@@ -155,15 +161,17 @@
                   Body
                 </span>
                 <span class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ bodySummary }}
+                  {{ request.contentLength }} bytes
                 </span>
               </div>
               <div class="flex items-center gap-1">
                 <div class="flex justify-end">
-                  <UButton v-if="isBinary || bodyState" type="button" color="success" size="md" icon="i-lucide-download"
-                    @click.stop="navigateTo(`/api/token/${tokenId}/requests/${request.id}/body/download`, { external: true })">
-                    Download
-                  </UButton>
+                  <UTooltip text="Download body">
+                    <ULink role="button" variant="ghost" color="neutral" size="xs" target="_blank"
+                      :href="`/api/token/${tokenId}/requests/${request.id}/body/download`">
+                      <UIcon name="i-lucide-download" size="xs" class="h-4 w-4" />
+                    </ULink>
+                  </UTooltip>
                 </div>
                 <UIcon :name="isBodyOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
                   class="h-5 w-5 text-gray-500 dark:text-gray-400" />
@@ -181,13 +189,14 @@
               <div v-else-if="isBinary || bodyState?.isBinary"
                 class="flex h-40 flex-col items-center justify-center gap-2 p-4 text-sm text-gray-500 dark:text-gray-400">
                 <UIcon name="i-lucide-download" class="h-6 w-6" />
-                <span>Binary body preview is not supported.</span>
+                <span>Preview disabled for binary content.</span>
               </div>
               <div v-else-if="!bodyState"
                 class="flex h-40 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                 Select a request to view body.
               </div>
-              <CodeHighlight v-else :code="bodyState.content" :language="bodyState.language" />
+              <CodeHighlight v-else :code="bodyState.content || 'No body attached to request'"
+                :language="bodyState.language" />
             </div>
           </div>
         </UCard>
@@ -201,30 +210,13 @@ import { computed, watch, ref } from 'vue'
 import { copyText } from '~/utils'
 import { notify } from '~/composables/useNotificationBridge'
 import CodeHighlight from '~/components/CodeHighlight.vue'
+import type { RequestSummary, QueryParam, HeaderParam, BodyState, MethodBadgeProps } from '~~/shared/types'
 
-type RequestSummary = {
-  id: number
-  method: string
-  url: string
-  headers: string
-  clientIp?: string
-  remoteIp?: string
-  createdAt: string
-  isBinary?: boolean
-}
+const props = defineProps<{ request: RequestSummary | null, requestNumber: number | null, tokenId: string }>()
 
-type QueryParam = { key: string; value: string }
-type HeaderParam = { key: string; value: string }
-type BodyState = { content: string, language: string, isBinary: boolean }
-
-type BadgeColor = 'primary' | 'neutral' | 'info' | 'success' | 'warning' | 'error'
-type BadgeVariant = 'solid' | 'soft' | 'outline' | 'subtle'
-type MethodBadgeProps = { color: BadgeColor, variant: BadgeVariant }
-
-const props = defineProps<{ request: RequestSummary | null, tokenId: string }>()
-
-const bodyState = ref<BodyState | null>(null)
 const bodyLoading = ref(false)
+const bodyState = ref<BodyState | null>(null)
+const isOpen = usePersistedState('request-details-open', true)
 const isBodyOpen = usePersistedState('request-body-open', false)
 const isQueryOpen = usePersistedState('request-query-open', true)
 const isHeadersOpen = usePersistedState('request-headers-open', true)
@@ -236,26 +228,6 @@ const clientIp = computed(() => {
     return null
   }
   return props.request.remoteIp || props.request.clientIp || null
-})
-
-const bodySummary = computed(() => {
-  if (!props.request) {
-    return 'No request selected'
-  }
-
-  const headerLength = headers.value.find((header) => header.key.toLowerCase() === 'content-length')?.value
-  const parsedHeaderLength = headerLength ? Number(headerLength) : NaN
-
-  const loadedLength = typeof bodyState.value?.content === 'string' ? bodyState.value.content.length : 0
-
-  const effectiveLength = Number.isFinite(parsedHeaderLength) && parsedHeaderLength >= 0
-    ? parsedHeaderLength
-    : loadedLength
-
-  if (!effectiveLength) {
-    return 'Empty body'
-  }
-  return `${effectiveLength.toLocaleString()} bytes`
 })
 
 const queryParams = computed((): QueryParam[] => {
@@ -332,7 +304,7 @@ const copyAllQueryParams = async () => {
 
 const isBinary = computed(() => Boolean(props.request?.isBinary))
 
-watch([() => props.request?.id, isBodyOpen], async ([newId, isOpen]) => {
+watch([() => props.request?.id, isBodyOpen], async ([newId, isOpen]: [string | undefined, boolean]) => {
   if (!newId || !isOpen) {
     console.log('Not loading body - no request or not open')
     return
@@ -344,7 +316,7 @@ watch([() => props.request?.id, isBodyOpen], async ([newId, isOpen]) => {
     return
   }
 
-  await loadBody(newId as number)
+  await loadBody(newId)
 }, { immediate: false })
 
 watch(() => props.request?.id, () => bodyState.value = null)
@@ -362,7 +334,7 @@ const toggleKV = (key: string, index: number) => {
 
 const isExpanded = (key: string, index: number): boolean => expandedKV.value.has(`${key}-${index}`)
 
-const loadBody = async (requestId: number) => {
+const loadBody = async (requestId: string) => {
   bodyLoading.value = true
   try {
     const res = await fetch(`/api/token/${props.tokenId}/requests/${requestId}/body`)
@@ -384,7 +356,7 @@ const loadBody = async (requestId: number) => {
 
     let text = data.text || ''
     const contentType = data.contentType || ''
-    let language = 'auto'
+    let language = 'text'
 
     if (contentType.includes('json')) {
       language = 'json'
@@ -415,7 +387,7 @@ const loadBody = async (requestId: number) => {
       }
     }
 
-    bodyState.value = { content: text || '(empty)', language, isBinary: false }
+    bodyState.value = { content: text || '', language, isBinary: false }
   } catch (error) {
     console.error('Failed to load body:', error)
     notify({ title: 'Error loading request body', description: 'Please try again', color: 'error' })
@@ -470,9 +442,11 @@ const handleCopyUrl = async () => {
     url = `${origin}${props.request.url.startsWith('/') ? '' : '/'}${props.request.url}`
   }
 
-  if (false === (await copyText(url))) {
-    notify({ title: 'Request URL copied', color: 'success' })
+  if (true !== (await copyText(url))) {
+    return
   }
+
+  notify({ title: 'Request URL copied', description: url, color: 'success' })
 }
 
 const handleCopyIp = async () => {
@@ -484,6 +458,6 @@ const handleCopyIp = async () => {
     return
   }
 
-  notify({ title: 'Client IP copied', color: 'success', })
+  notify({ title: 'Client IP copied', description: clientIp.value, color: 'success' })
 }
 </script>
