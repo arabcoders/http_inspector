@@ -19,12 +19,15 @@ export type TestH3Event = {
     }
   }
   context?: Record<string, unknown>
+  cookies?: Record<string, string>  // Add cookies support
   [k: string]: unknown
 }
 
 export function createH3Event(overrides?: Partial<TestH3Event> | Partial<H3Event>): H3Event {
   // Minimal H3Event-like object sufficient for our handlers in tests
   const headerStore = new Map<string, string | string[]>()
+  const cookieStore: Record<string, string> = {}
+  
   const base = {
     // mark as event for some libs that check this flag
     __is_event__: true,
@@ -39,6 +42,16 @@ export function createH3Event(overrides?: Partial<TestH3Event> | Partial<H3Event
         statusCode: 0,
         setHeader: (key: string, value: string | string[]) => {
           headerStore.set(key.toLowerCase(), value)
+          // Track cookies set via Set-Cookie header
+          if ('set-cookie' === key.toLowerCase()) {
+            const cookies = Array.isArray(value) ? value : [value]
+            for (const cookie of cookies) {
+              const match = cookie.match(/^([^=]+)=([^;]+)/)
+              if (match) {
+                cookieStore[match[1]] = match[2]
+              }
+            }
+          }
         },
         getHeader: (key: string) => headerStore.get(key.toLowerCase()),
         appendHeader: (key: string, value: string) => {
@@ -75,10 +88,24 @@ export function createH3Event(overrides?: Partial<TestH3Event> | Partial<H3Event
     }
   }
 
-  base.method = (base.node.req.method || 'GET').toUpperCase()
+  // Handle cookies from overrides
+  if (maybeTestEvent.cookies) {
+    Object.assign(cookieStore, maybeTestEvent.cookies)
+    // Build Cookie header from provided cookies
+    const cookieHeader = Object.entries(maybeTestEvent.cookies)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('; ')
+    if (cookieHeader) {
+      base.node.req.headers = { ...base.node.req.headers, cookie: cookieHeader }
+    }
+  }
 
-  const { node: _node, ...rest } = maybeTestEvent
-  return Object.assign(base, rest) as H3Event
+  // Cast to mutable to allow method assignment
+  const mutableBase = base as { method: string } & typeof base
+  mutableBase.method = (base.node.req.method || 'GET').toUpperCase() as typeof base.method
+
+  const { node: _node, cookies: _cookies, ...rest } = maybeTestEvent
+  return Object.assign(mutableBase, rest, { _cookieStore: cookieStore }) as H3Event
 }
 
 export default createH3Event

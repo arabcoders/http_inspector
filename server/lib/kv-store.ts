@@ -2,8 +2,8 @@ import { getDb } from '../db'
 import { keyValueStore } from '../db/schema'
 import { eq } from 'drizzle-orm'
 
-export const useKVStore = () => {
-    const db = getDb()
+export const useKVStore = (dbFile?: string) => {
+    const db = getDb(dbFile)
 
     /**
      * Normalize a key by trimming whitespace and converting to lowercase

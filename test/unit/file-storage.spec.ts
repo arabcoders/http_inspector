@@ -1,9 +1,10 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, afterAll, beforeAll } from 'vitest'
 import { useFileStorage } from '../../server/lib/file-storage'
 import { existsSync } from 'fs'
-import { rm } from 'fs/promises'
+import { rm, mkdtemp } from 'fs/promises'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
+import { tmpdir } from 'os'
 
 describe('file-storage', () => {
   const testSessionId = randomUUID()
@@ -11,9 +12,15 @@ describe('file-storage', () => {
   const testRequestId = randomUUID()
   
   let storage: ReturnType<typeof useFileStorage>
+  let testStoragePath: string
+  
+  beforeAll(async () => {
+    // Create isolated test storage directory
+    testStoragePath = await mkdtemp(join(tmpdir(), 'http-inspector-test-storage-'))
+  })
   
   beforeEach(() => {
-    storage = useFileStorage()
+    storage = useFileStorage(testStoragePath)
   })
   
   afterEach(async () => {
@@ -22,6 +29,13 @@ describe('file-storage', () => {
     const testDir = join(storageDir, testSessionId)
     if (existsSync(testDir)) {
       await rm(testDir, { recursive: true, force: true })
+    }
+  })
+
+  afterAll(async () => {
+    // Clean up entire test storage directory
+    if (existsSync(testStoragePath)) {
+      await rm(testStoragePath, { recursive: true, force: true })
     }
   })
 

@@ -35,9 +35,9 @@ const detectBinary = (buffer: Buffer, contentType: string): boolean => {
  * Database operations composable
  * Provides organized access to all database operations grouped by entity
  */
-export const useDatabase = () => {
-  const db = getDb()
-  const storage = useFileStorage()
+export const useDatabase = (dbFile?: string, filesPath?: string) => {
+  const db = getDb(dbFile)
+  const storage = useFileStorage(filesPath)
 
   /**
    * Try to generate a unique short ID for friendlyId fields

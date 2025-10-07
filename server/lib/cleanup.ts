@@ -18,10 +18,13 @@ const REQUEST_TTL_DAYS = 7
  * - Database cleanup failed to delete files
  * - Manual database deletions were performed
  * - File writes succeeded but database inserts failed
+ * 
+ * @param dbFile Optional database file path for testing
+ * @param filesPath Optional files storage path for testing
  */
-export const cleanupOrphanedFiles = async () => {
-  const db = getDb()
-  const storage = useFileStorage()
+export const cleanupOrphanedFiles = async (dbFile?: string, filesPath?: string) => {
+  const db = getDb(dbFile)
+  const storage = useFileStorage(filesPath)
 
   console.debug('Starting orphaned files cleanup...')
 
@@ -126,9 +129,9 @@ export const cleanupOrphanedFiles = async () => {
   }
 }
 
-export const cleanupExpiredData = async () => {
-  const db = getDb()
-  const storage = useFileStorage()
+export const cleanupExpiredData = async (dbFile?: string, filesPath?: string) => {
+  const db = getDb(dbFile)
+  const storage = useFileStorage(filesPath)
 
   console.debug('Starting database cleanup...')
 
@@ -180,7 +183,7 @@ export const cleanupExpiredData = async () => {
   console.debug('Database cleanup complete')
 
   // Clean up orphaned files
-  const orphanedResult = await cleanupOrphanedFiles()
+  const orphanedResult = await cleanupOrphanedFiles(dbFile, filesPath)
 
   return {
     deletedRequests: deletedRequests.length,

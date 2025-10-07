@@ -5,15 +5,21 @@ import { join } from 'path'
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null
 
-export const getDb = () => {
-    if (_db) {
+export const getDb = (dbFile?: string, newClient: boolean = false) => {
+    if (_db && !newClient) {
         return _db
     }
 
-    const storagePath = process.env.STORAGE_PATH || process.cwd() + '/var'
-    const dbPath = join(storagePath, 'inspector.sqlite')
-    const sqlite = new Database(dbPath)
+    let dbPath: string
 
+    if (dbFile) {
+        dbPath = dbFile
+    } else {
+        const storagePath = process.env.STORAGE_PATH || process.cwd() + '/var'
+        dbPath = join(storagePath, 'inspector.sqlite')
+    }
+
+    const sqlite = new Database(dbPath)
     sqlite.pragma('journal_mode = WAL')
     sqlite.pragma('foreign_keys = ON')
     _db = drizzle(sqlite, { schema })
