@@ -9,25 +9,23 @@ export default defineEventHandler(async (event) => {
   const events = useServerEvents()
   const db = useDatabase()
 
-  if (method === 'GET') {
-    const tokens = await db.tokens.list(sessionId)
-    return tokens
+  if ('GET' === method) {
+    return await db.tokens.list(sessionId)
   }
 
-  if (method === 'POST') {
+  if ('POST' === method) {
     const token = await db.tokens.create(sessionId)
-    events.publish(sessionId, 'token.created', { token: { id: token.id, createdAt: token.createdAt } })
-    return { id: token.id }
+    events.publish(sessionId, 'token.created', {
+      token: { id: token.id, friendlyId: token.friendlyId, createdAt: token.createdAt }
+    })
+    return token
   }
 
-  if (method === 'DELETE') {
+  if ('DELETE' === method) {
     await db.tokens.deleteAll(sessionId)
     events.publish(sessionId, 'token.cleared', {})
     return { ok: true }
   }
 
-  throw createError({
-    statusCode: 405,
-    message: 'Method not allowed'
-  })
+  throw createError({ statusCode: 405, message: 'Method not allowed' })
 })

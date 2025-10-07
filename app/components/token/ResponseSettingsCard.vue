@@ -66,13 +66,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { notify } from '~/composables/useNotificationBridge'
+import { useTokensStore } from '~/stores/tokens'
 
 const props = defineProps<{ tokenId: string }>()
 
-const loading = ref(false)
-const saving = ref(false)
+const tokensStore = useTokensStore()
+const { data: tokenData, isLoading: loading } = tokensStore.useToken(computed(() => props.tokenId))
+const { mutateAsync: updateToken, isPending: saving } = tokensStore.useUpdateToken()
+
 const isOpen = usePersistedState('response-settings-open', false)
 const responseEnabled = ref(false)
 const responseStatus = ref('200')
@@ -116,39 +119,15 @@ const textToHeaders = (input: string): Record<string, string> | null => {
     return Object.keys(out).length ? out : null
 }
 
-const loadTokenConfig = async () => {
-    loading.value = true
-    try {
-        const res = await fetch(`/api/token/${props.tokenId}`)
-        if (!res.ok) {
-            if (404 === res.status) {
-                notify({
-                    title: 'Token not found',
-                    description: 'This token does not exist or has been deleted.',
-                    color: 'error',
-                })
-                setTimeout(() => navigateTo('/'), 1500)
-                return
-            }
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-        }
-
-        const data = await res.json()
-        responseEnabled.value = Boolean(data.responseEnabled)
-        responseStatus.value = String(data.responseStatus ?? 200)
-        responseHeadersText.value = headersToText(data.responseHeaders)
-        responseBody.value = data.responseBody ?? ''
-    } catch (error) {
-        console.error('Failed to load token config:', error)
-        notify({
-            title: 'Error loading settings',
-            description: 'Failed to load response settings. Please try again.',
-            color: 'error',
-        })
-    } finally {
-        loading.value = false
-    }
-}
+// Watch for token data changes and update form
+watch(tokenData, (data) => {
+    if (!data) return
+    
+    responseEnabled.value = Boolean(data.responseEnabled)
+    responseStatus.value = String(data.responseStatus ?? 200)
+    responseHeadersText.value = headersToText(data.responseHeaders as Record<string, string> | null)
+    responseBody.value = data.responseBody ?? ''
+}, { immediate: true })
 
 const handleToggleEnabled = async (enabled: boolean | 'indeterminate') => {
     if (enabled === 'indeterminate') {
@@ -158,8 +137,6 @@ const handleToggleEnabled = async (enabled: boolean | 'indeterminate') => {
 }
 
 const handleSave = async (enabledOverride?: boolean) => {
-    saving.value = true
-
     try {
         const enabledValue = enabledOverride ?? responseEnabled.value
         const parsedStatus = parseInt(responseStatus.value, 10)
@@ -167,29 +144,15 @@ const handleSave = async (enabledOverride?: boolean) => {
         const headersObj = textToHeaders(responseHeadersText.value)
         const bodyValue = responseBody.value.length ? responseBody.value : null
 
-        const res = await fetch(`/api/token/${props.tokenId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                enabled: enabledValue,
-                status: statusCode,
-                headers: headersObj,
-                body: bodyValue,
-            }),
-        })
-
-        if (!res.ok) {
-            if (404 === res.status) {
-                notify({
-                    title: 'Token not found',
-                    description: 'This token does not exist or has been deleted.',
-                    color: 'error',
-                })
-                setTimeout(() => navigateTo('/'), 1500)
-                return
+        await updateToken({
+            tokenId: props.tokenId,
+            updates: {
+                responseEnabled: enabledValue,
+                responseStatus: statusCode,
+                responseHeaders: headersObj ? JSON.stringify(headersObj) : null,
+                responseBody: bodyValue,
             }
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-        }
+        })
 
         notify({ title: 'Response settings saved', color: 'success' })
     } catch (error) {
@@ -199,10 +162,6 @@ const handleSave = async (enabledOverride?: boolean) => {
             description: error instanceof Error ? error.message : 'Please try again.',
             color: 'error',
         })
-    } finally {
-        saving.value = false
     }
 }
-
-onMounted(() => loadTokenConfig())
 </script>

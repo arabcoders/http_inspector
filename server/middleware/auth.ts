@@ -1,8 +1,7 @@
-import { defineEventHandler, getCookie } from 'h3'
+import { defineEventHandler, getCookie, sendRedirect, createError, type H3Event, type EventHandlerRequest } from 'h3'
 import { verifyAuthToken } from '../lib/jwt'
-import type { ServerResponse } from 'http'
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   const AUTH_USERNAME = process.env.AUTH_USERNAME?.trim()
   const AUTH_PASSWORD = process.env.AUTH_PASSWORD?.trim()
 
@@ -10,8 +9,7 @@ export default defineEventHandler(async (event) => {
     return
   }
 
-  const { req, res } = event.node
-  const pathname = req.url || ''
+  const pathname = event.path || event.node?.req.url || ''
 
   const PUBLIC_PATHS = [
     '/_nuxt/',
@@ -38,30 +36,22 @@ export default defineEventHandler(async (event) => {
   const token = getCookie(event, 'auth_token')
 
   if (!token) {
-    redirectOrUnauthorized(pathname, res)
-    return
+    return redirectOrUnauthorized(event, pathname)
   }
 
   const username = await verifyAuthToken(token)
-
   if (!username) {
-    redirectOrUnauthorized(pathname, res)
-    return
+    return redirectOrUnauthorized(event, pathname)
   }
 })
 
-function redirectOrUnauthorized(pathname: string, res: ServerResponse) {
+const redirectOrUnauthorized = (event: H3Event<EventHandlerRequest>, pathname: string) => {
   if (!pathname.startsWith('/api/')) {
-    res.statusCode = 302
-    res.setHeader('Location', `/login?returnUrl=${encodeURIComponent(pathname)}`)
-    res.end()
-    return
+    return sendRedirect(event, `/login?returnUrl=${encodeURIComponent(pathname)}`, 302)
   }
 
-  res.statusCode = 401
-  res.setHeader('Content-Type', 'application/json')
-  res.end(JSON.stringify({
+  throw createError({
     statusCode: 401,
     message: 'Unauthorized - Please login to access this resource'
-  }))
+  })
 }

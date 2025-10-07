@@ -37,10 +37,10 @@
                             <div class="flex-1 min-w-0 flex items-center gap-2">
                                 <ULink :to="`/token/${token.id}`"
                                     class="font-mono text-sm text-primary hover:underline block truncate">
-                                    {{ shortSlug(token.id) }}
+                                    {{ token.friendlyId ? token.friendlyId : shortSlug(token.id) }}
                                 </ULink>
-                                <UBadge v-if="incomingTokenIds && incomingTokenIds.has(token.id)" color="success" variant="solid" size="xs"
-                                    class="font-semibold uppercase">
+                                <UBadge v-if="incomingTokenIds && incomingTokenIds.has(token.id)" color="success"
+                                    variant="solid" size="xs" class="font-semibold uppercase">
                                     New
                                 </UBadge>
                             </div>
@@ -55,7 +55,8 @@
                                 </UTooltip>
                             </div>
                         </div>
-                        <div class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400 select-none">
+                        <div
+                            class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400 select-none">
                             <span>{{ getRequestCount(token) }} requests</span>
                             <span>{{ formatDate(token.createdAt) }}</span>
                         </div>

@@ -1,7 +1,8 @@
-import { readRawBody, defineEventHandler, type H3Event, type EventHandlerRequest } from 'h3'
+import { readRawBody, defineEventHandler, setResponseHeader, setResponseStatus, type H3Event, type EventHandlerRequest } from 'h3'
 import { useDatabase } from '~~/server/lib/db'
 import type { Token } from '~~/shared/types'
 import { ingestRequest } from '~~/server/lib/request-ingestion'
+import { isUUID } from '~~/server/lib/utils'
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -44,12 +45,13 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   type EventContextParams = { params?: Record<string, string> }
   const ctx = (event.context as unknown as EventContextParams) || {}
   const params = ctx.params || {}
-  const tokenId = params.token as string | undefined
+  let tokenId = params.token as string | undefined
+  let sessionId: string | null = null
   const db = useDatabase()
-  
+
   if (!tokenId) {
-    event.node.res.statusCode = 404
-    event.node.res.end('not found')
+    setResponseStatus(event, 400)
+    event.node.res.end('token ID is required')
     return
   }
 
@@ -63,20 +65,32 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     }
   }
 
-  if (method === 'OPTIONS') {
+  if ('OPTIONS' === method) {
     const res = event.node.res
     for (const [k, v] of Object.entries(CORS_HEADERS)) {
-      res.setHeader(k, v)
+      setResponseHeader(event, k, v)
     }
-    res.statusCode = 204
+    setResponseStatus(event, 204)
     res.end()
     return
   }
 
-  const sessionId = await db.tokens.getSessionId(tokenId)
+  if (!isUUID(tokenId)) {
+    const tokenRow = await db.tokens.getByFriendlyId(tokenId)
+    if (!tokenRow) {
+      setResponseStatus(event, 404)
+      event.node.res.end()
+      return
+    }
+
+    tokenId = tokenRow.id
+    sessionId = tokenRow.sessionId
+  } else {
+    sessionId = await db.tokens.getSessionId(tokenId)
+  }
 
   if (!sessionId) {
-    event.node.res.statusCode = 404
+    setResponseStatus(event, 404)
     event.node.res.end()
     return
   }
@@ -84,7 +98,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const userToken = await db.tokens.get(sessionId, tokenId)
 
   if (!userToken) {
-    event.node.res.statusCode = 404
+    setResponseStatus(event, 404)
     event.node.res.end()
     return
   }
@@ -115,17 +129,19 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const resp = await buildResponse(userToken)
 
   for (const [k, v] of Object.entries(CORS_HEADERS)) {
-    event.node.res.setHeader(k, v)
+    setResponseHeader(event, k, v)
   }
 
   for (const [k, v] of Object.entries(resp.headers || {})) {
-    event.node.res.setHeader(k, v)
+    setResponseHeader(event, k, v)
   }
 
-  event.node.res.statusCode = resp.status || 200
+  setResponseStatus(event, resp.status || 200)
 
-  if (resp.body) {
-    event.node.res.end(resp.body)
+  if (!resp.body) {
+    event.node.res.end()
+    return
   }
-  else event.node.res.end()
+  
+  event.node.res.end(resp.body)
 })

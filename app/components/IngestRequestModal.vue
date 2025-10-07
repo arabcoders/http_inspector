@@ -104,6 +104,7 @@ Content-Type: application/json
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useRequestsStore } from '~/stores/requests'
 
 const props = withDefaults(defineProps<{
     modelValue: boolean
@@ -115,6 +116,9 @@ const emit = defineEmits<{
     (e: 'success'): void
 }>()
 
+const requestsStore = useRequestsStore()
+const { mutateAsync: ingestRequest, isPending: loading } = requestsStore.useIngestRequest()
+
 const isOpen = computed({
     get: () => props.modelValue,
     set: (value) => emit('update:modelValue', value)
@@ -123,7 +127,6 @@ const isOpen = computed({
 const rawRequest = ref('')
 const clientIp = ref('')
 const remoteIp = ref('')
-const loading = ref(false)
 const error = ref<string | null>(null)
 const success = ref<{ id: string } | null>(null)
 const errors = ref<{
@@ -182,7 +185,6 @@ const handleIngest = async () => {
         return
     }
 
-    loading.value = true
     error.value = null
     success.value = null
 
@@ -206,21 +208,8 @@ const handleIngest = async () => {
             body.remoteIp = remoteIp.value
         }
 
-        const res = await fetch(`/api/token/${props.tokenId}/ingest`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(body),
-        })
-
-        if (!res.ok) {
-            const data = await res.json().catch(() => ({}))
-            throw new Error(data.message || `HTTP ${res.status}: ${res.statusText}`)
-        }
-
-        const data = await res.json()
-        success.value = { id: data.request.id }
+        const data = await ingestRequest({ tokenId: props.tokenId, body })
+        success.value = { id: data?.request?.id || '' }
 
         emit('success')
 
@@ -229,8 +218,6 @@ const handleIngest = async () => {
     } catch (err) {
         error.value = err instanceof Error ? err.message : 'Failed to ingest request'
         console.error('Failed to ingest request:', err)
-    } finally {
-        loading.value = false
     }
 }
 

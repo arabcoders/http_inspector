@@ -63,12 +63,5 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     }
   }
 
-  return {
-    id: token.id,
-    createdAt: token.createdAt,
-    responseEnabled: token.responseEnabled,
-    responseStatus: token.responseStatus,
-    responseHeaders: headers,
-    responseBody: token.responseBody ?? null,
-  }
+  return { ...token, responseHeaders: headers, } as Omit<typeof token, 'responseHeaders'> & { responseHeaders: Record<string, string> | null }
 })

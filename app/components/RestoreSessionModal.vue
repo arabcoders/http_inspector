@@ -12,7 +12,7 @@
         <p class="text-sm text-gray-600 dark:text-gray-400">
           Enter your session ID to restore your tokens and requests.
         </p>
-        
+
         <div class="space-y-2">
           <label for="session-id" class="block font-bold text-sm text-gray-700 dark:text-gray-300">
             Session ID
@@ -58,7 +58,7 @@ const restore = async () => {
   loading.value = true
 
   try {
-    const response = await $fetch('/api/session/restore', {
+    const response = await $fetch<{ success: boolean }>('/api/session/restore', {
       method: 'POST',
       body: { sessionId: sessionId.value.trim() },
     })

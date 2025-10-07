@@ -12,7 +12,8 @@ export interface Session {
  * Token entity for webhook endpoints
  */
 export interface Token {
-    id: string // UUID - primary key, used for all operations
+    id: string
+    friendlyId: string | null
     sessionId: string // References session.id (UUID)
     createdAt: Date
     responseEnabled: boolean
@@ -80,7 +81,7 @@ export type TokenWithCount = Token & { _count?: { requests: number } }
 /**
  * Token list item for frontend display (serialized dates)
  */
-export type TokenListItem = Pick<Token, 'id'> & {
+export type TokenListItem = Pick<Token, 'id' | 'friendlyId'> & {
     createdAt?: string
     _count?: { requests: number }
 }
@@ -160,7 +161,7 @@ export interface ServerEventMap {
     'request.received': { token: string; request: Request }
     'request.deleted': { token: string; requestId: string }
     'request.cleared': { token: string }
-    'token.created': { token: Pick<Token, 'id' | 'createdAt'> }
+    'token.created': { token: Pick<Token, 'id' | 'friendlyId' | 'createdAt'> }
     'token.deleted': { token: { id: string } }
     'token.cleared': Record<string, never>
     'token.response.updated': { token: { id: string; responseEnabled: boolean; responseStatus: number } }
@@ -187,11 +188,10 @@ export interface SSEEventMap {
     }
     'token.created': {
         type: 'token.created'
-        token: string
+        token: Pick<Token, 'id' | 'friendlyId' | 'createdAt'>
     }
     'token.deleted': {
         type: 'token.deleted'
-        token: string
     }
 }
 
