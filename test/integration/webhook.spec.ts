@@ -50,6 +50,7 @@ vi.mock('~~/server/lib/db', () => ({
         responseHeaders: null, 
         responseBody: null 
       })),
+      getByFriendlyId: vi.fn(async (tokenId) => ({ id: tokenId})),
       getSessionId: vi.fn(async () => 'session-123'),
     },
     requests: {
