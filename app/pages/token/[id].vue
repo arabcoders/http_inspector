@@ -18,7 +18,7 @@
               Requests
             </UButton>
             <UBadge v-if="selectedRequest" size="sm">
-              #{{ selectedRequestNumber }}
+              {{ requests?.length || 0 }} / {{ selectedRequestNumber }}
             </UBadge>
             <div class="flex gap-2">
               <UButton type="button" variant="soft" color="primary" icon="i-lucide-upload"
@@ -34,7 +34,8 @@
           <div class="grid gap-6 px-6 pb-6 lg:p-6">
             <ResponseSettingsCard :token-id="tokenId" />
             <RawRequestCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
-            <RequestDetailsCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
+            <RequestDetailsCard :request="selectedRequest" :request-number="selectedRequestNumber"
+              :token-id="tokenId" />
           </div>
         </main>
       </ClientOnly>
@@ -79,7 +80,6 @@ const showClearModal = ref(false)
 const showIngestModal = ref(false)
 const isSidebarOpen = useState<boolean>('token-request-sidebar-open', () => false)
 
-const latestRequestIdRef = ref<string | null>(null)
 const selectedRequestIdRef = ref<string | null>(null)
 
 const selectedRequest = computed(() => requests.value?.find(r => r.id === selectedRequestId.value) || null)
@@ -88,7 +88,6 @@ const selectedRequestNumber = computed(() => {
   const index = requests.value.findIndex(r => r.id === selectedRequest.value!.id)
   return index !== -1 ? requests.value.length - index : null
 })
-watch(requests, n => latestRequestIdRef.value = n && n.length && n[0] ? n[0].id : null)
 
 watch(selectedRequestId, async newId => {
   selectedRequestIdRef.value = newId
@@ -112,10 +111,16 @@ watch(selectedRequestId, async newId => {
 })
 
 // Watch for initial request selection from query params
+// This should only run to sync with query params on initial load or when manually navigating
 watch(requests, (data) => {
   if (!data || !data.length) return
-  
-  // Check for request query parameter
+
+  // If we already have a selection and it exists in the data, keep it
+  if (selectedRequestId.value && data.some(r => r.id === selectedRequestId.value)) {
+    return
+  }
+
+  // Check for request query parameter (for initial load / URL navigation)
   const requestIdParam = route.query.request
   if (requestIdParam) {
     const requestId = String(requestIdParam)
@@ -125,6 +130,7 @@ watch(requests, (data) => {
     }
   }
 
+  // No selection and no query param - select the first request
   if (!selectedRequestId.value && data[0]) {
     selectedRequestId.value = data[0].id
   }
@@ -201,11 +207,13 @@ const handleClientEvent = (payload: SSEEventPayload) => {
         break
       }
 
+      // Determine if we should auto-select before modifying the cache
+      // Auto-select if: no selection OR currently viewing the first (latest) request
+      const isViewingLatest = requests.value && requests.value.length > 0 && selectedRequestIdRef.value === requests.value[0]?.id
+      const shouldAutoselect = selectedRequestIdRef.value === null || isViewingLatest
+
       // Use store's cache helper to add the request
       requestsStore.addRequestToCache(tokenId.value, incoming)
-
-      // Auto-select if no selection or if latest was selected
-      const shouldAutoselect = selectedRequestIdRef.value === null || selectedRequestIdRef.value === latestRequestIdRef.value
 
       if (shouldAutoselect) {
         selectedRequestId.value = incoming.id

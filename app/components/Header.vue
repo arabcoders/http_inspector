@@ -68,6 +68,12 @@
                 <div v-if="showMobileExtras && hasMobileExtras" id="header-mobile-extras"
                     class="mt-3 grid gap-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-gray-900/90 p-3 shadow-sm md:hidden">
                     <ClientOnly>
+                        <code v-if="selectedToken"
+                            class="select-none cursor-pointer sm:inline-block rounded bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-mono text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                            @click="copyPayloadUrl">
+                        /api/payload/{{ friendlyId || shortSlug(selectedToken) }}
+                        </code>
+
                         <UButton v-if="sessionInfo && sessionRestoreEnabled" color="neutral" variant="soft" size="sm"
                             icon="i-lucide-user" @click="copySessionId">
                             {{ sessionInfo.friendlyId }}

@@ -125,7 +125,7 @@ const connect = (url: string = '/api/events', opts: EventSourceInit | undefined 
         }
 
         const delay = getReconnectDelay()
-        console.log(`[SSE] Reconnecting in ${delay}ms...`)
+        console.debug(`[SSE] Reconnecting in ${delay}ms...`)
         reconnectTimeoutId = setTimeout(() => connect(url), delay)
     })
 }
@@ -139,7 +139,7 @@ const disconnect = (): void => {
     if (eventSource) {
         try {
             eventSource.close()
-            console.log('[SSE] Connection closed')
+            console.debug('[SSE] Connection closed')
         } catch {
             // Ignore errors
         }
@@ -259,7 +259,7 @@ export const useSSE = (autoConnect: boolean = true) => {
          * Manually trigger a reconnection
          */
         reconnect(): void {
-            console.log('[SSE] Manual reconnection triggered')
+            console.debug('[SSE] Manual reconnection triggered')
             reconnectAttempts = 0
             connect()
         },
