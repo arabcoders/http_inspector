@@ -54,6 +54,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
 import { useRequestsStore } from '~/stores/requests'
+import { useTokensStore } from '~/stores/tokens'
 import { useSSE } from '~/composables/useSSE'
 import type { SSEEventPayload, RequestSummary } from '~~/shared/types'
 import { notify } from '~/composables/useNotificationBridge'
@@ -62,11 +63,13 @@ import ResponseSettingsCard from '~/components/token/ResponseSettingsCard.vue'
 import RequestDetailsCard from '~/components/token/RequestDetailsCard.vue'
 import RawRequestCard from '~/components/token/RawRequestCard.vue'
 import IngestRequestModal from '~/components/IngestRequestModal.vue'
-import { copyText } from '~/utils'
+import { copyText, shortSlug } from '~/utils'
 
 const route = useRoute()
 
 const tokenId = computed(() => String(route.params.id || ''))
+
+const { data: token } = useTokensStore().useToken(tokenId)
 
 const requestsStore = useRequestsStore()
 const { data: requests } = requestsStore.useRequestsList(tokenId)
@@ -164,7 +167,8 @@ const handleDeleteRequest = async (id: string) => {
 
 const copyPayloadURL = async () => {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const url = `${origin}/api/payload/${tokenId.value}`
+  const friendlyId = token.value?.friendlyId ?? shortSlug(tokenId.value)
+  const url = `${origin}/api/payload/${friendlyId}`
 
   try {
     await copyText(url)

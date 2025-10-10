@@ -99,7 +99,9 @@ const confirmDeleteToken = async () => {
 
 const copyPayloadURL = async (id: string) => {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const url = `${origin}/api/payload/${id}`
+  const token = tokens.value?.find(t => t.id === id)
+  const friendlyId = token?.friendlyId ?? shortSlug(id)
+  const url = `${origin}/api/payload/${friendlyId}`
   await copyText(url)
   notify({ title: 'URL copied', description: url, color: 'success', })
 }
