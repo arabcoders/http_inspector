@@ -7,13 +7,19 @@ const JWT_EXPIRATION = '7d'
 
 let cachedSecret: string | null = null
 
-const getJwtSecret = async (): Promise<string> => {
+/**
+ * Retrieve or generate the JWT secret key
+ * 
+ * @param dbFile Optional database file path for testing
+ * @returns secret key string
+ */
+const getJwtSecret = async (dbFile?: string): Promise<string> => {
   if (cachedSecret) {
     return cachedSecret
   }
 
   try {
-    const kv = useKVStore()
+    const kv = useKVStore(dbFile)
     const AUTH_SECRET_KEY = 'auth:secret'
 
     let storedSecret = await kv.get<string>(AUTH_SECRET_KEY)
@@ -31,8 +37,15 @@ const getJwtSecret = async (): Promise<string> => {
   }
 }
 
-export const generateAuthToken = async (username: string): Promise<string> => {
-  return jwt.sign({ username, type: 'auth' }, await getJwtSecret(), {
+/**
+ * Generate a JWT for the given username
+ * 
+ * @param username Username to include in the token
+ * @param dbFile Optional database file path for testing
+ * @returns JWT string
+ */
+export const generateAuthToken = async (username: string, dbFile?: string): Promise<string> => {
+  return jwt.sign({ username, type: 'auth' }, await getJwtSecret(dbFile), {
     algorithm: 'HS256',
     expiresIn: JWT_EXPIRATION,
     issuer: 'http-inspector',
@@ -40,9 +53,16 @@ export const generateAuthToken = async (username: string): Promise<string> => {
   })
 }
 
-export const verifyAuthToken = async (token: string): Promise<string | null> => {
+/**
+ * Verify a JWT and return the username if valid
+ * Returns null if invalid or expired
+ * @param token JWT string to verify
+ * @param dbFile Optional database file path for testing
+ * @returns username or null
+ */
+export const verifyAuthToken = async (token: string, dbFile?: string): Promise<string | null> => {
   try {
-    const secret = await getJwtSecret()
+    const secret = await getJwtSecret(dbFile)
 
     const decoded = jwt.verify(token, secret, {
       algorithms: ['HS256'],
@@ -59,4 +79,13 @@ export const verifyAuthToken = async (token: string): Promise<string | null> => 
   }
 }
 
+/**
+ * Reset the cached secret (for testing purposes)
+ */
+export const resetCachedSecret = () => { cachedSecret = null }
+
+/**
+ * Get max age in seconds for auth tokens
+ * Used for setting cookie expiration
+ */
 export const getTokenMaxAge = (): number => 7 * 24 * 60 * 60

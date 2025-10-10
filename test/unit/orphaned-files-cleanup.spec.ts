@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest'
 import { cleanupOrphanedFiles, cleanupExpiredData } from '../../server/lib/cleanup'
 import { useDatabase } from '../../server/lib/db'
 import { useFileStorage } from '../../server/lib/file-storage'
@@ -8,19 +8,22 @@ import { sql } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 import { mkdir } from 'fs/promises'
 import { join } from 'path'
-import { runMigrations } from '../../server/db/migrate'
+import { createTestDb, type TestDbContext } from '../utils/testDb'
 
 describe('Orphaned Files Cleanup', () => {
-  const db = useDatabase()
-  const storage = useFileStorage()
-  const rawDb = getDb()
+  let testDb: TestDbContext
+  let db: ReturnType<typeof useDatabase>
+  let storage: ReturnType<typeof useFileStorage>
+  let rawDb: ReturnType<typeof getDb>
 
   // Test data
   let testSessionId: string
 
   beforeAll(async () => {
-    // Run migrations to create database tables
-    await runMigrations()
+    testDb = await createTestDb()
+    db = useDatabase(testDb.dbFile, testDb.filesPath)
+    storage = useFileStorage(testDb.filesPath)
+    rawDb = getDb(testDb.dbFile)
   })
 
   beforeEach(async () => {
@@ -42,16 +45,8 @@ describe('Orphaned Files Cleanup', () => {
     await storage.ensureStorageDir()
   })
 
-  afterEach(async () => {
-    // Clean up test data
-    await rawDb.delete(requests)
-    await rawDb.delete(tokens)
-    await rawDb.delete(sessions)
-
-    // Clean up test files
-    if (testSessionId) {
-      await storage.deleteSession(testSessionId)
-    }
+  afterAll(async () => {
+    await testDb.cleanup()
   })
 
   describe('cleanupOrphanedFiles', () => {
@@ -83,7 +78,7 @@ describe('Orphaned Files Cleanup', () => {
       expect(storage.exists(request.bodyPath!)).toBe(true)
 
       // Run orphaned files cleanup
-      const result = await cleanupOrphanedFiles()
+      const result = await cleanupOrphanedFiles(testDb.dbFile, testDb.filesPath)
 
       // File should now be deleted
       expect(storage.exists(request.bodyPath!)).toBe(false)
@@ -134,7 +129,7 @@ describe('Orphaned Files Cleanup', () => {
       expect(storage.exists(req2.bodyPath!)).toBe(true)
 
       // Run orphaned files cleanup
-      await cleanupOrphanedFiles()
+      await cleanupOrphanedFiles(testDb.dbFile, testDb.filesPath)
 
       // Files should now be deleted
       expect(storage.exists(req1.bodyPath!)).toBe(false)
@@ -168,7 +163,7 @@ describe('Orphaned Files Cleanup', () => {
       expect(storage.exists(request.bodyPath!)).toBe(true)
 
       // Run orphaned files cleanup
-      await cleanupOrphanedFiles()
+      await cleanupOrphanedFiles(testDb.dbFile, testDb.filesPath)
 
       // File should now be deleted
       expect(storage.exists(request.bodyPath!)).toBe(false)
@@ -195,7 +190,7 @@ describe('Orphaned Files Cleanup', () => {
       expect(storage.exists(request.bodyPath!)).toBe(true)
 
       // Run orphaned files cleanup
-      const result = await cleanupOrphanedFiles()
+      const result = await cleanupOrphanedFiles(testDb.dbFile, testDb.filesPath)
 
       // File should still exist
       expect(storage.exists(request.bodyPath!)).toBe(true)
@@ -225,7 +220,7 @@ describe('Orphaned Files Cleanup', () => {
       expect(storage.exists(bodyPath)).toBe(true)
 
       // Run orphaned files cleanup
-      const result = await cleanupOrphanedFiles()
+      const result = await cleanupOrphanedFiles(testDb.dbFile, testDb.filesPath)
 
       // Orphaned file should be deleted (session dir deleted since session doesn't exist)
       expect(storage.exists(bodyPath)).toBe(false)
@@ -260,7 +255,7 @@ describe('Orphaned Files Cleanup', () => {
       await rawDb.delete(requests).where(sql`${requests.id} = ${request.id}`)
 
       // Run full cleanup
-      const result = await cleanupExpiredData()
+      const result = await cleanupExpiredData(testDb.dbFile, testDb.filesPath)
 
       // Should report orphaned files
       expect(result.orphanedFiles).toBeGreaterThanOrEqual(1)

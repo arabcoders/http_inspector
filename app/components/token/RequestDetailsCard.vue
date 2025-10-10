@@ -167,7 +167,7 @@
               <div class="flex items-center gap-1">
                 <div class="flex justify-end">
                   <UTooltip text="Download body">
-                    <ULink role="button" variant="ghost" color="neutral" size="xs" target="_blank"
+                    <ULink :external="true" role="button" variant="ghost" color="neutral" size="xs" target="_blank"
                       :href="`/api/token/${tokenId}/requests/${request.id}/body/download`">
                       <UIcon name="i-lucide-download" size="xs" class="h-4 w-4" />
                     </ULink>
@@ -306,7 +306,6 @@ const isBinary = computed(() => Boolean(props.request?.isBinary))
 
 watch([() => props.request?.id, isBodyOpen], async ([newId, isOpen]: [string | undefined, boolean]) => {
   if (!newId || !isOpen) {
-    console.log('Not loading body - no request or not open')
     return
   }
 

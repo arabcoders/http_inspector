@@ -17,7 +17,7 @@
                         <code
                             class="hidden select-none cursor-pointer sm:inline-block rounded bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-mono text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                             @click="copyPayloadUrl">
-                        /api/payload/{{ shortSlug(selectedToken) }}
+                        /api/payload/{{ friendlyId || shortSlug(selectedToken) }}
                     </code>
                     </UTooltip>
                 </div>
@@ -68,6 +68,12 @@
                 <div v-if="showMobileExtras && hasMobileExtras" id="header-mobile-extras"
                     class="mt-3 grid gap-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-gray-900/90 p-3 shadow-sm md:hidden">
                     <ClientOnly>
+                        <code v-if="selectedToken"
+                            class="select-none cursor-pointer sm:inline-block rounded bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-mono text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                            @click="copyPayloadUrl">
+                        /api/payload/{{ friendlyId || shortSlug(selectedToken) }}
+                        </code>
+
                         <UButton v-if="sessionInfo && sessionRestoreEnabled" color="neutral" variant="soft" size="sm"
                             icon="i-lucide-user" @click="copySessionId">
                             {{ sessionInfo.friendlyId }}
@@ -95,7 +101,7 @@
 <script setup lang="ts">
 import { computed, watch, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { useTokens } from '~/composables/useTokens'
+import { useTokensStore } from '~/stores/tokens'
 import { useSSE } from '~/composables/useSSE'
 import type { SSEEventPayload } from '~~/shared/types'
 import { notify } from '~/composables/useNotificationBridge'
@@ -105,12 +111,16 @@ const route = useRoute()
 const colorMode = useColorMode()
 const runtimeConfig = useRuntimeConfig()
 
-const { tokens, loadTokens, deleteToken: removeToken } = useTokens()
+const tokensStore = useTokensStore()
+const { data: tokens, refetch: refetchTokens } = tokensStore.useTokensList()
+const { mutateAsync: deleteToken } = tokensStore.useDeleteToken()
+
 const sse = useSSE()
 
 const sessionRestoreEnabled = runtimeConfig.public?.sessionRestoreEnabled !== false
 
 const selectedToken = ref<string>('')
+const friendlyId = ref<string>('')
 const isDeleting = ref(false)
 const showDeleteModal = ref(false)
 const showRestoreModal = ref(false)
@@ -118,9 +128,21 @@ const sessionInfo = ref<{ friendlyId: string } | null>(null)
 const authRequired = ref(false)
 const showMobileExtras = ref(false)
 
+// Query for the currently selected token to get friendlyId
+const { data: currentTokenData } = tokensStore.useToken(selectedToken)
+
+// Watch for changes in token data to update friendlyId
+watch(currentTokenData, (tokenData) => {
+    if (tokenData) {
+        friendlyId.value = tokenData.friendlyId || ''
+    } else {
+        friendlyId.value = ''
+    }
+})
+
 const checkAuthStatus = async () => {
     try {
-        const response = await $fetch('/api/auth/status')
+        const response = await $fetch<{ required: boolean }>('/api/auth/status')
         authRequired.value = response.required
     } catch {
         authRequired.value = false
@@ -135,7 +157,7 @@ watch(selectedToken, newVal => {
 
 const loadSessionInfo = async () => {
     try {
-        const data = await $fetch('/api/session')
+        const data = await $fetch<{ friendlyId: string }>('/api/session')
         if (data?.friendlyId) {
             sessionInfo.value = { friendlyId: data.friendlyId }
         }
@@ -165,12 +187,12 @@ const copySessionId = async () => {
 }
 
 const copyPayloadUrl = async () => {
-    if (!selectedToken.value) {
+    if (!selectedToken.value && !friendlyId.value) {
         return
     }
 
     const origin = 'undefined' !== typeof window ? window.location.origin : ''
-    const url = `${origin}/api/payload/${selectedToken.value}`
+    const url = `${origin}/api/payload/${friendlyId.value || selectedToken.value}`
 
     try {
         if (false === (await copyText(url))) {
@@ -203,12 +225,13 @@ const tokenOptions = computed(() => {
     })
 })
 
-watch(() => route.path, (path) => {
+watch(() => route.path, async (path) => {
     const match = path.match(/\/token\/(.+)/)
     if (match && match[1]) {
         selectedToken.value = match[1]
     } else {
         selectedToken.value = ''
+        friendlyId.value = ''
     }
     showMobileExtras.value = false
 }, { immediate: true })
@@ -228,13 +251,12 @@ function handleClientEvent(payload: SSEEventPayload) {
         return
     }
 
-    loadTokens()
+    refetchTokens()
 }
 
 let unsubscribe: (() => void) | null = null
 
 onMounted(async () => {
-    await loadTokens()
     await loadSessionInfo()
     await checkAuthStatus()
     unsubscribe = sse.onAny(handleClientEvent)
@@ -257,7 +279,7 @@ const toggleMobileExtras = () => {
 
 const handleLogout = async () => {
     try {
-        await $fetch('/api/auth/logout', { method: 'POST' })
+        await $fetch<{ ok: boolean }>('/api/auth/logout', { method: 'POST' })
         notify({
             title: 'Logged out',
             description: 'You have been logged out successfully.',
@@ -296,7 +318,7 @@ const confirmDelete = async () => {
         const activeIndex = currentTokens.findIndex((t: { id: string }) => t.id === selectedToken.value)
         const fallback = activeIndex !== -1 ? currentTokens[activeIndex + 1] ?? currentTokens[activeIndex - 1] : undefined
 
-        await removeToken(selectedToken.value)
+        await deleteToken(selectedToken.value)
 
         if (fallback) {
             await navigateTo(`/token/${fallback.id}`)

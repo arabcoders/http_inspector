@@ -44,12 +44,16 @@
 import { onMounted, onUnmounted, computed, ref } from 'vue'
 import { marked } from 'marked'
 import { useSSE } from '~/composables/useSSE'
-import { useTokens } from '~/composables/useTokens'
-import { copyText } from '~/utils'
+import { useTokensStore } from '~/stores/tokens'
+import { copyText, shortSlug } from '~/utils'
 import { notify } from '~/composables/useNotificationBridge'
 import type { TokenListItem, SSEEventPayload } from '~~/shared/types'
 
-const { tokens, loadTokens, createToken, clearTokens } = useTokens()
+const tokensStore = useTokensStore()
+const { data: tokens, refetch: refetchTokens } = tokensStore.useTokensList()
+const { mutateAsync: createTokenMutation } = tokensStore.useCreateToken()
+const { mutateAsync: deleteTokenMutation } = tokensStore.useDeleteToken()
+const { mutateAsync: deleteAllTokensMutation } = tokensStore.useDeleteAllTokens()
 
 const requestCounts = ref<Map<string, number>>(new Map())
 const incomingTokenIds = ref<Set<string>>(new Set())
@@ -63,11 +67,11 @@ const openSidebar = () => isSidebarOpen.value = true
 const closeSidebar = () => isSidebarOpen.value = false
 
 const sortedTokens = computed(() => (tokens.value || []).slice().sort((a: TokenListItem, b: TokenListItem) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()))
-const create = async () => await createToken()
+const create = async () => await createTokenMutation()
 
 const confirmDeleteAll = async () => {
   showDeleteAllModal.value = false
-  await clearTokens()
+  await deleteAllTokensMutation()
   notify({
     title: 'All tokens deleted',
     description: 'All tokens and their requests have been removed',
@@ -84,8 +88,7 @@ const confirmDeleteToken = async () => {
   showDeleteTokenModal.value = false
   tokenToDelete.value = null
 
-  await fetch(`/api/token/${id}`, { method: 'DELETE' })
-  await loadTokens()
+  await deleteTokenMutation(id)
 
   notify({
     title: 'Token deleted',
@@ -96,7 +99,9 @@ const confirmDeleteToken = async () => {
 
 const copyPayloadURL = async (id: string) => {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const url = `${origin}/api/payload/${id}`
+  const token = tokens.value?.find(t => t.id === id)
+  const friendlyId = token?.friendlyId ?? shortSlug(id)
+  const url = `${origin}/api/payload/${friendlyId}`
   await copyText(url)
   notify({ title: 'URL copied', description: url, color: 'success', })
 }
@@ -107,29 +112,27 @@ const deleteToken = (id: string) => {
 }
 
 const handleClientEvent = (payload: SSEEventPayload): void => {
-  const tokenId = payload.token as string
 
+  const tokenId = payload.token as string
   switch (payload.type) {
     case 'token.created': {
-      loadTokens()
+      refetchTokens()
+      const token = (payload as SSEEventMap['token.created']).token
+      notify({
+        title: 'Token created',
+        description: `Click to view token ${token.friendlyId}`,
+        color: 'success',
+        actions: [{
+          label: 'View Token',
+          onClick: async () => { await navigateTo(`/token/${token.id}`) },
+        }],
+      })
 
-      const rTokenId = (payload.token as unknown as { id: string })?.id
-      if (rTokenId) {
-        notify({
-          title: 'Token created',
-          description: `Click to view token ${shortSlug(rTokenId)}`,
-          color: 'success',
-          actions: [{
-            label: 'View Token',
-            onClick: async () => { await navigateTo(`/token/${rTokenId}`) },
-          }],
-        })
-      }
       break
     }
 
     case 'token.deleted': {
-      loadTokens()
+      refetchTokens()
       if (tokenId) {
         requestCounts.value.delete(tokenId)
       }
@@ -197,7 +200,6 @@ let unsubscribe: (() => void) | null = null
 
 onMounted(async () => {
   marked.setOptions({ gfm: true, breaks: false })
-  await loadTokens()
 
   readmeContent.value = await marked.parse(await $fetch<string>('/api/readme'))
 

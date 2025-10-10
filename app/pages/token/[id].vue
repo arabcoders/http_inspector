@@ -6,7 +6,7 @@
       <RequestSidebar :class="[
         'fixed inset-y-0 left-0 z-40 max-w-[20rem] shrink-0 transform shadow-xl transition-transform duration-300 ease-in-out lg:relative lg:inset-auto lg:z-auto lg:max-w-none lg:shadow-none',
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      ]" :requests="requests" :selected-request-id="selectedRequestId" :incoming-ids="incomingIds"
+      ]" :requests="requests || []" :selected-request-id="selectedRequestId" :incoming-ids="incomingIds"
         :copy-state="copyState" show-mobile-close @close="closeSidebar" @select="handleSelectRequest"
         @copy-url="copyPayloadURL" @clear="showClearModal = true" @ingest="showIngestModal = true"
         @delete="handleDeleteRequest" />
@@ -18,14 +18,14 @@
               Requests
             </UButton>
             <UBadge v-if="selectedRequest" size="sm">
-              #{{ selectedRequestNumber }}
+              {{ requests?.length || 0 }} / {{ selectedRequestNumber }}
             </UBadge>
             <div class="flex gap-2">
               <UButton type="button" variant="soft" color="primary" icon="i-lucide-upload"
                 @click="showIngestModal = true">
                 Ingest
               </UButton>
-              <UButton type="button" variant="soft" color="error" icon="i-lucide-trash-2" :disabled="!requests.length"
+              <UButton type="button" variant="soft" color="error" icon="i-lucide-trash-2" :disabled="!requests?.length"
                 @click="showClearModal = true">
                 Clear
               </UButton>
@@ -34,7 +34,8 @@
           <div class="grid gap-6 px-6 pb-6 lg:p-6">
             <ResponseSettingsCard :token-id="tokenId" />
             <RawRequestCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
-            <RequestDetailsCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
+            <RequestDetailsCard :request="selectedRequest" :request-number="selectedRequestNumber"
+              :token-id="tokenId" />
           </div>
         </main>
       </ClientOnly>
@@ -52,6 +53,8 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
+import { useRequestsStore } from '~/stores/requests'
+import { useTokensStore } from '~/stores/tokens'
 import { useSSE } from '~/composables/useSSE'
 import type { SSEEventPayload, RequestSummary } from '~~/shared/types'
 import { notify } from '~/composables/useNotificationBridge'
@@ -60,31 +63,34 @@ import ResponseSettingsCard from '~/components/token/ResponseSettingsCard.vue'
 import RequestDetailsCard from '~/components/token/RequestDetailsCard.vue'
 import RawRequestCard from '~/components/token/RawRequestCard.vue'
 import IngestRequestModal from '~/components/IngestRequestModal.vue'
-import { copyText } from '~/utils'
+import { copyText, shortSlug } from '~/utils'
 
 const route = useRoute()
 
 const tokenId = computed(() => String(route.params.id || ''))
 
-const requests = ref<RequestSummary[]>([])
+const { data: token } = useTokensStore().useToken(tokenId)
+
+const requestsStore = useRequestsStore()
+const { data: requests } = requestsStore.useRequestsList(tokenId)
+const { mutateAsync: deleteRequestMutation } = requestsStore.useDeleteRequest()
+const { mutateAsync: deleteAllRequestsMutation } = requestsStore.useDeleteAllRequests()
+
 const selectedRequestId = ref<string | null>(null)
 const incomingIds = ref<Set<string>>(new Set())
 const copyState = ref<'idle' | 'copied'>('idle')
 const showClearModal = ref(false)
 const showIngestModal = ref(false)
 const isSidebarOpen = useState<boolean>('token-request-sidebar-open', () => false)
-const tokenExists = ref(false)
 
-const latestRequestIdRef = ref<string | null>(null)
 const selectedRequestIdRef = ref<string | null>(null)
 
-const selectedRequest = computed(() => requests.value.find(r => r.id === selectedRequestId.value) || null)
+const selectedRequest = computed(() => requests.value?.find(r => r.id === selectedRequestId.value) || null)
 const selectedRequestNumber = computed(() => {
-  if (!selectedRequest.value) return null
+  if (!selectedRequest.value || !requests.value) return null
   const index = requests.value.findIndex(r => r.id === selectedRequest.value!.id)
   return index !== -1 ? requests.value.length - index : null
 })
-watch(requests, n => latestRequestIdRef.value = n.length && n[0] ? n[0].id : null)
 
 watch(selectedRequestId, async newId => {
   selectedRequestIdRef.value = newId
@@ -107,48 +113,31 @@ watch(selectedRequestId, async newId => {
   }
 })
 
-const loadRequests = async () => {
-  try {
-    const res = await fetch(`/api/token/${tokenId.value}/requests`)
-    if (!res.ok) {
-      if (404 === res.status) {
-        notify({
-          title: 'Token not found',
-          description: 'This token does not exist or has been deleted.',
-          color: 'error'
-        })
-        await navigateTo('/')
-        return
-      }
-      throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-    }
+// Watch for initial request selection from query params
+// This should only run to sync with query params on initial load or when manually navigating
+watch(requests, (data) => {
+  if (!data || !data.length) return
 
-    const data = await res.json() as RequestSummary[]
-    requests.value = data
-    tokenExists.value = true
-
-    // Check for request query parameter
-    const requestIdParam = route.query.request
-    if (requestIdParam) {
-      const requestId = String(requestIdParam)
-      if (data.some(r => r.id === requestId)) {
-        selectedRequestId.value = requestId
-        return
-      }
-    }
-
-    if (!selectedRequestId.value && data.length > 0 && data[0]) {
-      selectedRequestId.value = data[0].id
-    }
-  } catch (error) {
-    console.error('Failed to load requests:', error)
-    notify({
-      title: 'Error loading requests',
-      description: 'Failed to load requests. Please try again.',
-      color: 'error',
-    })
+  // If we already have a selection and it exists in the data, keep it
+  if (selectedRequestId.value && data.some(r => r.id === selectedRequestId.value)) {
+    return
   }
-}
+
+  // Check for request query parameter (for initial load / URL navigation)
+  const requestIdParam = route.query.request
+  if (requestIdParam) {
+    const requestId = String(requestIdParam)
+    if (data.some(r => r.id === requestId)) {
+      selectedRequestId.value = requestId
+      return
+    }
+  }
+
+  // No selection and no query param - select the first request
+  if (!selectedRequestId.value && data[0]) {
+    selectedRequestId.value = data[0].id
+  }
+}, { immediate: true })
 
 const handleSelectRequest = async (id: string) => {
   selectedRequestId.value = id
@@ -161,20 +150,15 @@ const handleSelectRequest = async (id: string) => {
 
 const handleDeleteRequest = async (id: string) => {
   try {
-    const res = await fetch(`/api/token/${tokenId.value}/requests/${id}`, { method: 'DELETE' })
-    if (res.ok) {
-      requests.value = requests.value.filter(r => r.id !== id)
+    await deleteRequestMutation({ tokenId: tokenId.value, requestId: id })
 
-      // If the deleted request was selected, clear selection or select next
-      if (selectedRequestId.value === id) {
-        const firstRequest = requests.value.length > 0 ? requests.value[0] : null
-        selectedRequestId.value = firstRequest ? firstRequest.id : null
-      }
-
-      notify({ title: 'Request deleted', variant: 'success' })
-    } else {
-      throw new Error('Failed to delete request')
+    // If the deleted request was selected, clear selection or select next
+    if (selectedRequestId.value === id) {
+      const firstRequest = requests.value && requests.value.length > 0 ? requests.value[0] : null
+      selectedRequestId.value = firstRequest ? firstRequest.id : null
     }
+
+    notify({ title: 'Request deleted', variant: 'success' })
   } catch (error) {
     console.error('Failed to delete request:', error)
     notify({ title: 'Failed to delete request', variant: 'error' })
@@ -183,7 +167,8 @@ const handleDeleteRequest = async (id: string) => {
 
 const copyPayloadURL = async () => {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const url = `${origin}/api/payload/${tokenId.value}`
+  const friendlyId = token.value?.friendlyId ?? shortSlug(tokenId.value)
+  const url = `${origin}/api/payload/${friendlyId}`
 
   try {
     await copyText(url)
@@ -199,19 +184,18 @@ const handleClearRequests = async () => {
   showClearModal.value = false
 
   try {
-    const res = await fetch(`/api/token/${tokenId.value}/requests`, { method: 'DELETE' })
-    if (res.ok) {
-      requests.value = []
-      selectedRequestId.value = null
-      notify({ title: 'Requests cleared', variant: 'success' })
-    }
+    await deleteAllRequestsMutation(tokenId.value)
+    selectedRequestId.value = null
+    notify({ title: 'Requests cleared', variant: 'success' })
   } catch (error) {
     console.error('Failed to clear requests:', error)
     notify({ title: 'Failed to delete requests', variant: 'error' })
   }
 }
 
-const handleIngestSuccess = async () => await loadRequests()
+const handleIngestSuccess = () => {
+  // The store will auto-refetch after the mutation
+}
 const openSidebar = () => isSidebarOpen.value = true
 const closeSidebar = () => isSidebarOpen.value = false
 
@@ -227,12 +211,13 @@ const handleClientEvent = (payload: SSEEventPayload) => {
         break
       }
 
-      if (!requests.value.some(r => r.id === incoming.id)) {
-        requests.value = [incoming, ...requests.value]
-      }
+      // Determine if we should auto-select before modifying the cache
+      // Auto-select if: no selection OR currently viewing the first (latest) request
+      const isViewingLatest = requests.value && requests.value.length > 0 && selectedRequestIdRef.value === requests.value[0]?.id
+      const shouldAutoselect = selectedRequestIdRef.value === null || isViewingLatest
 
-      // Auto-select if no selection or if latest was selected
-      const shouldAutoselect = selectedRequestIdRef.value === null || selectedRequestIdRef.value === latestRequestIdRef.value
+      // Use store's cache helper to add the request
+      requestsStore.addRequestToCache(tokenId.value, incoming)
 
       if (shouldAutoselect) {
         selectedRequestId.value = incoming.id
@@ -249,8 +234,9 @@ const handleClientEvent = (payload: SSEEventPayload) => {
       }
 
       // Calculate request number: requests are in reverse order (newest first)
-      const index = requests.value.findIndex(r => r.id === incoming.id)
-      const requestNumber = index !== -1 ? requests.value.length - index : requests.value.length
+      const currentRequests = requests.value || []
+      const index = currentRequests.findIndex(r => r.id === incoming.id)
+      const requestNumber = index !== -1 ? currentRequests.length - index : currentRequests.length
 
       notify({
         title: `Request ${incoming.method}`,
@@ -275,9 +261,9 @@ const handleClientEvent = (payload: SSEEventPayload) => {
       if (typeof payload.requestId !== 'string') {
         break
       }
-      console.log('Deleting request with ID:', payload.requestId, requests.value.map(r => r.id))
 
-      requests.value = requests.value.filter(r => r.id !== payload.requestId)
+      // Use store's cache helper to remove the request
+      requestsStore.removeRequestFromCache(tokenId.value, payload.requestId)
 
       if (selectedRequestIdRef.value === payload.requestId) {
         selectedRequestId.value = null
@@ -291,7 +277,8 @@ const handleClientEvent = (payload: SSEEventPayload) => {
     }
 
     case 'request.cleared': {
-      requests.value = []
+      // Use store's cache helper to clear requests
+      requestsStore.clearRequestsCache(tokenId.value)
       selectedRequestId.value = null
 
       if (incomingIds.value.size) {
@@ -310,7 +297,6 @@ let unsubscribe: (() => void) | null = null
 
 onMounted(async () => {
   isSidebarOpen.value = false
-  await loadRequests()
   unsubscribe = useSSE().onAny(handleClientEvent)
 })
 

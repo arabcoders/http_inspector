@@ -17,7 +17,7 @@
           </UTooltip>
 
           <UTooltip v-if="request" text="Download raw request">
-            <ULink type="button" variant="ghost" color="neutral" size="xs" role="button"
+            <ULink :external="true" type="button" variant="ghost" color="neutral" size="xs" role="button"
               :href="`/api/token/${tokenId}/requests/${request?.id}/raw`" target="_blank">
               <UIcon name="i-lucide-download" size="xs" class="h-4 w-4" />
             </ULink>
