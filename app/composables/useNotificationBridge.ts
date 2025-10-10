@@ -118,6 +118,7 @@ const showToastNotification = (payload: NotificationPayload) => {
  */
 export const useNotificationBridge = () => {
     const notificationType = usePersistedState<NotificationType>('notification-type', 'toast')
+    const isMuted = usePersistedState<boolean>('notifications-muted', false)
     const browserPermission = ref<NotificationPermission>('default')
 
     if (import.meta.client && 'Notification' in window) {
@@ -125,6 +126,10 @@ export const useNotificationBridge = () => {
     }
 
     const notify = (payload: NotificationPayload) => {
+        if (isMuted.value) {
+            return
+        }
+
         if (notificationType.value === 'browser') {
             showBrowserNotification(payload)
         } else {
@@ -155,6 +160,10 @@ export const useNotificationBridge = () => {
         await setNotificationType(newType)
     }
 
+    const toggleMute = () => {
+        isMuted.value = !isMuted.value
+    }
+
     const isBrowserNotificationSupported = computed(() => import.meta.client && 'Notification' in window)
 
     const isBrowserNotificationAvailable = computed(() => isBrowserNotificationSupported.value && 'granted' === browserPermission.value)
@@ -164,6 +173,8 @@ export const useNotificationBridge = () => {
         notificationType: readonly(notificationType),
         setNotificationType,
         toggleNotificationType,
+        isMuted: readonly(isMuted),
+        toggleMute,
         isBrowserNotificationSupported,
         isBrowserNotificationAvailable,
         browserPermission: readonly(browserPermission)

@@ -32,10 +32,10 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   if ('PATCH' === method) {
     const body = (await readBody(event).catch(() => ({}))) as unknown
     const payload = body as Record<string, unknown>
-    const enabled = Boolean(payload.enabled)
-    const status = Number(payload.status ?? 200)
-    const headers = (payload.headers as unknown) as Record<string, string> | null
-    const responseBody = (payload.body as unknown) as string | null
+    const enabled = Boolean(payload.responseEnabled)
+    const status = Number(payload.responseStatus ?? 200)
+    const headers = (payload.responseHeaders as unknown) as Record<string, string> | null
+    const responseBody = (payload.responseBody as unknown) as string | null
 
     await db.tokens.update(sessionId, tokenId, {
       responseEnabled: enabled,

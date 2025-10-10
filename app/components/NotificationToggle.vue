@@ -1,10 +1,17 @@
 <template>
     <ClientOnly>
-        <UTooltip :text="tooltipText" :shortcuts="[]">
-            <UButton :icon="currentIcon" :color="notificationType === 'browser' ? 'primary' : 'neutral'" variant="ghost"
-                :aria-label="ariaLabel" :disabled="!isBrowserNotificationSupported && notificationType === 'toast'"
-                @click="handleToggle" />
-        </UTooltip>
+        <div class="flex items-center gap-2">
+            <UTooltip :text="muteTooltipText" :shortcuts="[]">
+                <UButton :icon="muteIcon" :color="isMuted ? 'error' : 'neutral'" variant="ghost"
+                    :aria-label="muteAriaLabel" @click="handleMuteToggle" />
+            </UTooltip>
+            <UTooltip :text="tooltipText" :shortcuts="[]">
+                <UButton :icon="currentIcon" :color="notificationType === 'browser' ? 'primary' : 'neutral'"
+                    variant="ghost" :aria-label="ariaLabel"
+                    :disabled="!isBrowserNotificationSupported && notificationType === 'toast'"
+                    @click="handleToggle" />
+            </UTooltip>
+        </div>
     </ClientOnly>
 </template>
 
@@ -16,10 +23,18 @@ const {
     notificationType,
     toggleNotificationType,
     isBrowserNotificationSupported,
-    browserPermission
+    browserPermission,
+    isMuted,
+    toggleMute
 } = useNotificationBridge()
 
-const currentIcon = computed(() => 'browser' === notificationType.value ? 'i-lucide-bell' : 'i-lucide-bell-off')
+const currentIcon = computed(() => 'browser' === notificationType.value ? 'i-lucide-monitor' : 'i-lucide-message-square')
+
+const muteIcon = computed(() => isMuted.value ? 'i-lucide-bell-off' : 'i-lucide-bell-ring')
+
+const muteTooltipText = computed(() => isMuted.value ? 'Notifications muted (click to unmute)' : 'Notifications active (click to mute)')
+
+const muteAriaLabel = computed(() => isMuted.value ? 'Unmute notifications' : 'Mute notifications')
 
 const tooltipText = computed(() => {
     if (!isBrowserNotificationSupported.value) {
@@ -40,4 +55,6 @@ const tooltipText = computed(() => {
 const ariaLabel = computed(() => 'browser' === notificationType.value ? 'Switch to toast notifications' : 'Switch to browser notifications')
 
 const handleToggle = async () => await toggleNotificationType()
+
+const handleMuteToggle = () => toggleMute()
 </script>
