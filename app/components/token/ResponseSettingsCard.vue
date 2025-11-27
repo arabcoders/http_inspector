@@ -30,7 +30,7 @@
                     <label for="response-status" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Status code
                     </label>
-                    <UInput id="response-status" v-model="responseStatus" type="number" :min="100" :max="599"
+                    <UInput id="response-status" v-model="responseStatus" type="text" inputmode="numeric"
                         placeholder="200" :disabled="loading" size="md" class="w-full" />
                 </div>
 
