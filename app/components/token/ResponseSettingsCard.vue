@@ -84,7 +84,10 @@ const responseBody = ref('')
 const isFormInitialized = ref(false)
 
 const statusSummary = computed(() => {
-    const statusLabel = responseStatus.value?.trim().length ? responseStatus.value : '200'
+    let statusLabel = '200';
+    if (!responseStatus.value) {
+        statusLabel = responseStatus.value?.trim().length ? responseStatus.value : '200'
+    }
     return responseEnabled.value ? `Custom response enabled · ${statusLabel}` : 'Custom responses disabled'
 })
 
