@@ -81,6 +81,7 @@ const responseEnabled = ref(false)
 const responseStatus = ref('200')
 const responseHeadersText = ref('')
 const responseBody = ref('')
+const isFormInitialized = ref(false)
 
 const statusSummary = computed(() => {
     const statusLabel = responseStatus.value?.trim().length ? responseStatus.value : '200'
@@ -119,14 +120,17 @@ const textToHeaders = (input: string): Record<string, string> | null => {
     return Object.keys(out).length ? out : null
 }
 
-// Watch for token data changes and update form
+// Watch for token data changes and update form only on initial load
 watch(tokenData, (data) => {
-    if (!data) return
+    if (!data || isFormInitialized.value) {
+        return
+    }
     
     responseEnabled.value = Boolean(data.responseEnabled)
     responseStatus.value = String(data.responseStatus ?? 200)
     responseHeadersText.value = headersToText(data.responseHeaders as Record<string, string> | null)
     responseBody.value = data.responseBody ?? ''
+    isFormInitialized.value = true
 }, { immediate: true })
 
 const handleToggleEnabled = async (enabled: boolean | 'indeterminate') => {
