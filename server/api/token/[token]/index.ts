@@ -34,13 +34,13 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     const payload = body as Record<string, unknown>
     const enabled = Boolean(payload.responseEnabled)
     const status = Number(payload.responseStatus ?? 200)
-    const headers = (payload.responseHeaders as unknown) as Record<string, string> | null
+    const headers = (payload.responseHeaders as unknown) as string | null
     const responseBody = (payload.responseBody as unknown) as string | null
 
     await db.tokens.update(sessionId, tokenId, {
       responseEnabled: enabled,
       responseStatus: status,
-      responseHeaders: headers ? JSON.stringify(headers) : null,
+      responseHeaders: headers,
       responseBody,
     })
 

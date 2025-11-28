@@ -30,7 +30,7 @@
                     <label for="response-status" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Status code
                     </label>
-                    <UInput id="response-status" v-model="responseStatus" type="number" :min="100" :max="599"
+                    <UInput id="response-status" v-model="responseStatus" type="text" inputmode="numeric"
                         placeholder="200" :disabled="loading" size="md" class="w-full" />
                 </div>
 
@@ -81,9 +81,13 @@ const responseEnabled = ref(false)
 const responseStatus = ref('200')
 const responseHeadersText = ref('')
 const responseBody = ref('')
+const isFormInitialized = ref(false)
 
 const statusSummary = computed(() => {
-    const statusLabel = responseStatus.value?.trim().length ? responseStatus.value : '200'
+    let statusLabel = '200';
+    if (!responseStatus.value) {
+        statusLabel = responseStatus.value?.trim().length ? responseStatus.value : '200'
+    }
     return responseEnabled.value ? `Custom response enabled · ${statusLabel}` : 'Custom responses disabled'
 })
 
@@ -119,14 +123,17 @@ const textToHeaders = (input: string): Record<string, string> | null => {
     return Object.keys(out).length ? out : null
 }
 
-// Watch for token data changes and update form
+// Watch for token data changes and update form only on initial load
 watch(tokenData, (data) => {
-    if (!data) return
+    if (!data || isFormInitialized.value) {
+        return
+    }
     
     responseEnabled.value = Boolean(data.responseEnabled)
     responseStatus.value = String(data.responseStatus ?? 200)
     responseHeadersText.value = headersToText(data.responseHeaders as Record<string, string> | null)
     responseBody.value = data.responseBody ?? ''
+    isFormInitialized.value = true
 }, { immediate: true })
 
 const handleToggleEnabled = async (enabled: boolean | 'indeterminate') => {
