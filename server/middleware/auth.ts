@@ -23,6 +23,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     '/web-app-manifest-192x192.png',
     '/web-app-manifest-512x512.png',
     '/api/payload/',
+    '/api/view/',
     '/api/auth/',
     '/login',
   ]
