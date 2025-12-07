@@ -32,6 +32,7 @@
             </div>
           </div>
           <div class="grid gap-6 px-6 pb-6 lg:p-6">
+            <ApiUrlsCard :token-id="tokenId" />
             <ResponseSettingsCard :token-id="tokenId" />
             <RawRequestCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
             <RequestDetailsCard :request="selectedRequest" :request-number="selectedRequestNumber"
@@ -59,6 +60,7 @@ import { useSSE } from '~/composables/useSSE'
 import type { SSEEventPayload, RequestSummary } from '~~/shared/types'
 import { notify } from '~/composables/useNotificationBridge'
 import RequestSidebar from '~/components/RequestSidebar.vue'
+import ApiUrlsCard from '~/components/token/ApiUrlsCard.vue'
 import ResponseSettingsCard from '~/components/token/ResponseSettingsCard.vue'
 import RequestDetailsCard from '~/components/token/RequestDetailsCard.vue'
 import RawRequestCard from '~/components/token/RawRequestCard.vue'
