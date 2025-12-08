@@ -1,5 +1,5 @@
-import { defineEventHandler, readBody, type H3Event, type EventHandlerRequest } from 'h3'
-import { setSession } from '~~/server/lib/session'
+import { defineEventHandler, readBody, createError, type H3Event, type EventHandlerRequest } from 'h3'
+import { setSession, LLM_SESSION_FRIENDLY_ID } from '~~/server/lib/session'
 import { isValidFriendlyId } from '~~/server/lib/friendly-id'
 
 export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
@@ -17,6 +17,14 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     throw createError({
       statusCode: 400,
       message: 'Invalid session ID format. Use (e.g., famous-amethyst-panda)',
+    })
+  }
+
+  // Prevent restoring the static LLM session
+  if (sessionId === LLM_SESSION_FRIENDLY_ID) {
+    throw createError({
+      statusCode: 403,
+      message: 'Cannot restore system session',
     })
   }
 

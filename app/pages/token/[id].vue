@@ -159,8 +159,6 @@ const handleDeleteRequest = async (id: string) => {
       const firstRequest = requests.value && requests.value.length > 0 ? requests.value[0] : null
       selectedRequestId.value = firstRequest ? firstRequest.id : null
     }
-
-    notify({ title: 'Request deleted', variant: 'success' })
   } catch (error) {
     console.error('Failed to delete request:', error)
     notify({ title: 'Failed to delete request', variant: 'error' })
@@ -175,7 +173,6 @@ const copyPayloadURL = async () => {
   try {
     await copyText(url)
     copyState.value = 'copied'
-    notify({ title: 'Payload URL copied', description: url, variant: 'success' })
     setTimeout(() => copyState.value = 'idle', 1200)
   } catch (error) {
     console.error('Failed to copy URL:', error)

@@ -147,10 +147,6 @@ const handleCopyIp = async (request: RequestSummary) => {
     return
   }
 
-  if (false === (await copyText(clientIp))) {
-    return
-  }
-
-  notify({ title: 'Client IP copied', description: clientIp, color: 'success' })
+  await copyText(clientIp)
 }
 </script>

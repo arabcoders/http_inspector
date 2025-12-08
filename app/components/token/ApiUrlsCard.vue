@@ -83,14 +83,13 @@ const payloadUrl = computed(() => {
 
 const viewUrl = computed(() => {
     const friendlyId = token.value?.friendlyId || ''
-    return `${origin.value}/api/view/${friendlyId}?secret=${props.tokenId}`
+    return `${origin.value}/api/llm/token/${friendlyId}?secret=${props.tokenId}`
 })
 
 const handleCopyPayload = async () => {
     try {
         await copyText(payloadUrl.value)
         copyPayloadState.value = 'copied'
-        notify({ title: 'Webhook URL copied', description: payloadUrl.value, variant: 'success' })
         setTimeout(() => copyPayloadState.value = 'idle', 1200)
     } catch (error) {
         console.error('Failed to copy URL:', error)
@@ -102,7 +101,6 @@ const handleCopyView = async () => {
     try {
         await copyText(viewUrl.value)
         copyViewState.value = 'copied'
-        notify({ title: 'API URL copied', description: viewUrl.value, variant: 'success' })
         setTimeout(() => copyViewState.value = 'idle', 1200)
     } catch (error) {
         console.error('Failed to copy URL:', error)

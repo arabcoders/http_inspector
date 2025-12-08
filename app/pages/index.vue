@@ -89,12 +89,6 @@ const confirmDeleteToken = async () => {
   tokenToDelete.value = null
 
   await deleteTokenMutation(id)
-
-  notify({
-    title: 'Token deleted',
-    description: 'The token and its requests have been removed',
-    color: 'success',
-  })
 }
 
 const copyPayloadURL = async (id: string) => {
@@ -103,7 +97,6 @@ const copyPayloadURL = async (id: string) => {
   const friendlyId = token?.friendlyId ?? shortSlug(id)
   const url = `${origin}/api/payload/${friendlyId}`
   await copyText(url)
-  notify({ title: 'URL copied', description: url, color: 'success', })
 }
 
 const deleteToken = (id: string) => {
