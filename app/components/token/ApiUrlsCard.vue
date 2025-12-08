@@ -16,7 +16,6 @@
         </template>
 
         <div v-if="isOpen" class="flex flex-col gap-4 p-4 border-t border-gray-200 dark:border-gray-700">
-            <!-- Payload URL -->
             <div class="space-y-2">
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Webhook URL
@@ -24,11 +23,8 @@
                 <div class="flex gap-2">
                     <UInput :model-value="payloadUrl" readonly size="md" class="flex-1 font-mono text-xs" />
                     <UTooltip :text="copyPayloadState === 'copied' ? 'Copied!' : 'Copy URL'">
-                        <UButton 
-                            :icon="copyPayloadState === 'copied' ? 'i-lucide-check' : 'i-lucide-copy'"
-                            color="neutral" 
-                            variant="soft"
-                            @click="handleCopyPayload" />
+                        <UButton :icon="copyPayloadState === 'copied' ? 'i-lucide-check' : 'i-lucide-copy'"
+                            color="neutral" variant="soft" @click="handleCopyPayload" />
                     </UTooltip>
                 </div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
@@ -36,7 +32,6 @@
                 </p>
             </div>
 
-            <!-- View API URL -->
             <div class="space-y-2">
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Automation API URL
@@ -44,15 +39,12 @@
                 <div class="flex gap-2">
                     <UInput :model-value="viewUrl" readonly size="md" class="flex-1 font-mono text-xs" />
                     <UTooltip :text="copyViewState === 'copied' ? 'Copied!' : 'Copy URL'">
-                        <UButton 
-                            :icon="copyViewState === 'copied' ? 'i-lucide-check' : 'i-lucide-copy'"
-                            color="neutral" 
-                            variant="soft"
-                            @click="handleCopyView" />
+                        <UButton :icon="copyViewState === 'copied' ? 'i-lucide-check' : 'i-lucide-copy'" color="neutral"
+                            variant="soft" @click="handleCopyView" />
                     </UTooltip>
                 </div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
-                    Read-only API for automation/LLMs. Returns all requests with bodies in JSON format.
+                    Read-only API for automation/LLMs.
                 </p>
             </div>
         </div>

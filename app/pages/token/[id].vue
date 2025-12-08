@@ -32,7 +32,7 @@
             </div>
           </div>
           <div class="grid gap-6 px-6 pb-6 lg:p-6">
-            <ApiUrlsCard :token-id="tokenId" />
+            <ApiUrlsCard v-if="llmEndpointEnabled" :token-id="tokenId" />
             <ResponseSettingsCard :token-id="tokenId" />
             <RawRequestCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
             <RequestDetailsCard :request="selectedRequest" :request-number="selectedRequestNumber"
@@ -77,6 +77,8 @@ const requestsStore = useRequestsStore()
 const { data: requests } = requestsStore.useRequestsList(tokenId)
 const { mutateAsync: deleteRequestMutation } = requestsStore.useDeleteRequest()
 const { mutateAsync: deleteAllRequestsMutation } = requestsStore.useDeleteAllRequests()
+
+const llmEndpointEnabled = useRuntimeConfig().public?.llmEndpointEnabled === true
 
 const selectedRequestId = ref<string | null>(null)
 const incomingIds = ref<Set<string>>(new Set())
