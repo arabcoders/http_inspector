@@ -72,6 +72,35 @@ The UI is available at http://localhost:3001 and the container persists until yo
 | **AUTH_PASSWORD**           | No       | **-**                     | Password required for login when authentication is enabled     |
 | **SESSION_RESTORE_ENABLED** | No       | **true**                  | Enable restoring previous sessions by friendly ID              |
 | **RAW_FULL_URL**            | No       | **false**                 | Include full URL in raw request output                         |
+| **ENABLE_LLM_ENDPOINT**     | No       | **false**                 | Enable LLM API endpoints for programmatic access               |
+
+## Python Client
+
+A Python client library and CLI tool is available for programmatic access to the LLM API endpoints. The client provides:
+
+- **Token Management**: Create, get, update, and delete webhook tokens
+- **Request Inspection**: View captured requests and their details  
+- **Response Configuration**: Set custom responses for webhook endpoints
+- **Environment Configuration**: Configure via environment variables
+
+### Quick Start
+
+```bash
+# Get API information
+./bin/http_inspector_client info
+
+# Create a webhook token
+./bin/http_inspector_client create
+
+# View captured requests
+./bin/http_inspector_client get <token-id>
+
+# Get latest request
+./bin/http_inspector_client latest <token-id>
+
+# Configure custom response
+./bin/http_inspector_client update <token-id> --status 201 --body "Created"
+```
 
 ## API Reference
 
@@ -392,6 +421,124 @@ Report authentication status.
   "required": true
 }
 ```
+
+### LLM API
+
+The LLM API provides programmatic access designed for automation tools and LLMs. **Must be enabled with `ENABLE_LLM_ENDPOINT=true`.**
+
+**Key Features:**
+- Tokens created via this API are associated with a static LLM session
+- No authentication required for LLM-created tokens
+- User tokens can be accessed read-only with `?secret=UUID` parameter
+- Tokens identified by UUID or 8-character friendlyId
+
+#### GET /api/llm
+Get API information and documentation.
+
+**Response:**
+```json
+{
+  "name": "HTTP Inspector LLM API",
+  "version": "1.0.0",
+  "description": "API endpoints designed for programmatic access",
+  "endpoints": [...],
+  "notes": [...]
+}
+```
+
+#### POST /api/llm/token
+Create a new payload token in the LLM session.
+
+**Response:**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "friendlyId": "abc12345",
+  "sessionId": "llm-session-static-id",
+  "createdAt": "2025-01-15T10:30:00.000Z",
+  "payloadUrl": "http://localhost:3000/api/payload/abc12345",
+  "responseEnabled": false,
+  "responseStatus": 200,
+  "responseHeaders": null,
+  "responseBody": null
+}
+```
+
+#### GET /api/llm/token/:token
+Get token details and all captured requests.
+
+**Parameters:**
+- `:token` - Token ID (UUID) or friendlyId (8-char)
+- `?secret=UUID` - Required for user tokens (read-only access)
+
+**Response:**
+```json
+{
+  "token": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "friendlyId": "abc12345",
+    "createdAt": "2025-01-15T10:30:00.000Z",
+    "payloadUrl": "http://localhost:3000/api/payload/abc12345"
+  },
+  "requests": [
+    {
+      "id": "650e8400-e29b-41d4-a716-446655440000",
+      "method": "POST",
+      "url": "/api/payload/abc12345?test=1",
+      "headers": {"content-type": "application/json"},
+      "contentType": "application/json",
+      "contentLength": 42,
+      "isBinary": false,
+      "body": "{\"test\":\"data\"}",
+      "clientIp": "192.168.1.100",
+      "remoteIp": "203.0.113.1",
+      "createdAt": "2025-01-15T10:30:00.000Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+**Notes:** Binary data in request bodies is marked as `[Binary data not included]`.
+
+#### GET /api/llm/token/:token/latest
+Get the most recent request for a token.
+
+**Parameters:**
+- `:token` - Token ID (UUID) or friendlyId (8-char)
+- `?secret=UUID` - Required for user tokens (read-only access)
+
+**Response:** Single request object (same format as requests array above).
+
+**Returns `404`** if no requests exist for the token.
+
+#### PATCH /api/llm/token/:token
+Update token response settings. **LLM tokens only** (user tokens not allowed).
+
+**Parameters:**
+- `:token` - Token ID (UUID) or friendlyId (8-char)
+
+**Request Body:**
+```json
+{
+  "responseEnabled": true,
+  "responseStatus": 201,
+  "responseHeaders": "{\"Content-Type\":\"application/json\"}",
+  "responseBody": "{\"status\":\"created\"}"
+}
+```
+
+All fields are optional. Configure what the webhook endpoint returns when it receives requests.
+
+**Response:** `{ "ok": true }`
+
+#### DELETE /api/llm/token/:token
+Delete a token and all its associated requests. **LLM tokens only** (user tokens not allowed).
+
+**Parameters:**
+- `:token` - Token ID (UUID) or friendlyId (8-char)
+
+**Response:** `{ "ok": true }`
 
 ### Standard Responses
 

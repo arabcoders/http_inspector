@@ -25,3 +25,4 @@ prisma/dev.*
 nextjs-based/*
 llm*.txt
 nextjs-based/
+__pycache__

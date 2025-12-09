@@ -43,7 +43,7 @@
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^24.10.1",
+    "@types/node": "^24.10.2",
     "drizzle-kit": "^0.31.8",
     "tsx": "^4.21.0",
     "vitest": "^4.0.15"

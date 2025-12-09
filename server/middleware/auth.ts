@@ -22,7 +22,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     '/manifest.webmanifest',
     '/web-app-manifest-192x192.png',
     '/api/payload/',
-    '/api/llm/',
+    '/api/llm',
     '/api/auth/',
     '/login',
   ]

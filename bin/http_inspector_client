@@ -1,0 +1,508 @@
+#!/usr/bin/env python3
+"""
+HTTP Inspector LLM API Client
+
+A Python client for interacting with the HTTP Inspector LLM API endpoints.
+Supports token management, request inspection, and webhook configuration.
+
+Environment Variables:
+    HTTP_INSPECTOR_URL: Base URL of the HTTP Inspector instance (default: http://localhost:3000)
+    HTTP_INSPECTOR_TOKEN: Token ID for operations (optional)
+    HTTP_INSPECTOR_SECRET: Secret for accessing user tokens (optional)
+    HTTP_INSPECTOR_INSECURE: Skip SSL certificate verification (default: false)
+"""
+
+import os
+import sys
+import json
+import ssl
+import argparse
+from typing import Optional, Dict, Any
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode, quote
+from pathlib import Path
+
+
+def get_config_dir() -> Path:
+    """Get the config directory following XDG Base Directory specification."""
+    if os.name == "nt":  # Windows
+        config_home = Path(
+            os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")
+        )
+    else:  # Linux/Mac
+        config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+
+    config_dir = config_home / "http-inspector"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir
+
+
+def save_last_token(token_data: Dict[str, Any]) -> None:
+    """Save the last created token to config file."""
+    try:
+        config_file = get_config_dir() / "last_token.json"
+        with open(config_file, "w") as f:
+            json.dump(
+                {
+                    "id": token_data["id"],
+                    "friendlyId": token_data.get("friendlyId"),
+                    "payloadUrl": token_data["payloadUrl"],
+                    "createdAt": token_data.get("createdAt"),
+                },
+                f,
+                indent=2,
+            )
+    except Exception:
+        pass  # Silently fail if we can't save
+
+
+def load_last_token() -> Optional[str]:
+    """Load the last created token ID from config file."""
+    try:
+        config_file = get_config_dir() / "last_token.json"
+        if config_file.exists():
+            with open(config_file, "r") as f:
+                data = json.load(f)
+                return data.get("id") or data.get("friendlyId")
+    except Exception:
+        pass
+    return None
+
+
+class HTTPInspectorClient:
+    """Client for interacting with HTTP Inspector LLM API"""
+
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        token: Optional[str] = None,
+        secret: Optional[str] = None,
+        insecure: bool = False,
+    ):
+        """
+        Initialize the HTTP Inspector client.
+
+        Args:
+            base_url: Base URL of the HTTP Inspector instance
+            token: Default token ID for operations
+            secret: Secret for accessing user tokens
+            insecure: Skip SSL certificate verification
+        """
+        self.base_url = (
+            base_url or os.getenv("HTTP_INSPECTOR_URL", "http://localhost:3000")
+        ).rstrip("/")
+        self.token = token or os.getenv("HTTP_INSPECTOR_TOKEN")
+        self.secret = secret or os.getenv("HTTP_INSPECTOR_SECRET")
+        self.insecure = insecure or os.getenv(
+            "HTTP_INSPECTOR_INSECURE", ""
+        ).lower() in ("true", "1", "yes")
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        data: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Make an HTTP request to the API.
+
+        Args:
+            method: HTTP method (GET, POST, PATCH, DELETE)
+            path: API path
+            data: Request body data (for POST/PATCH)
+            params: Query parameters
+
+        Returns:
+            Response data as dictionary
+
+        Raises:
+            HTTPError: If the request fails
+        """
+        url = f"{self.base_url}{path}"
+
+        if params:
+            url = f"{url}?{urlencode(params)}"
+
+        headers = {"Content-Type": "application/json"}
+
+        req_data = None
+        if data is not None:
+            req_data = json.dumps(data).encode("utf-8")
+
+        request = Request(url, data=req_data, headers=headers, method=method)
+
+        # Create SSL context for insecure mode
+        context = None
+        if self.insecure and url.startswith("https://"):
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+
+        try:
+            with urlopen(request, timeout=30, context=context) as response:
+                response_data = response.read().decode("utf-8")
+                if response_data:
+                    return json.loads(response_data)
+                return {}
+        except HTTPError as e:
+            error_body = e.read().decode("utf-8") if e.fp else ""
+            try:
+                error_data = json.loads(error_body) if error_body else {}
+                error_msg = error_data.get("message", str(e))
+            except json.JSONDecodeError:
+                error_msg = error_body or str(e)
+
+            print(f"HTTP Error {e.code}: {error_msg}", file=sys.stderr)
+            raise
+        except URLError as e:
+            print(f"URL Error: {e.reason}", file=sys.stderr)
+            raise
+
+    def get_api_info(self) -> Dict[str, Any]:
+        """
+        Get LLM API information and available endpoints.
+
+        Returns:
+            API metadata and endpoint documentation
+        """
+        return self._request("GET", "/api/llm/")
+
+    def create_token(self) -> Dict[str, Any]:
+        """
+        Create a new payload token.
+
+        Returns:
+            Token details including ID, friendlyId, and payloadUrl
+        """
+        return self._request("POST", "/api/llm/token")
+
+    def get_token(
+        self, token_id: Optional[str] = None, secret: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get token details and all captured requests.
+
+        Args:
+            token_id: Token ID (UUID or 8-char friendlyId). Uses default if not provided.
+            secret: Secret for user tokens. Uses default if not provided.
+
+        Returns:
+            Token details and list of all requests
+        """
+        token = token_id or self.token or load_last_token()
+        if not token:
+            raise ValueError("Token ID is required")
+
+        params = {}
+        if secret or self.secret:
+            params["secret"] = secret or self.secret
+
+        return self._request("GET", f"/api/llm/token/{quote(token)}", params=params)
+
+    def get_latest_request(
+        self, token_id: Optional[str] = None, secret: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get the most recent request for a token.
+
+        Args:
+            token_id: Token ID (UUID or 8-char friendlyId). Uses default if not provided.
+            secret: Secret for user tokens. Uses default if not provided.
+
+        Returns:
+            Latest request details
+
+        Raises:
+            HTTPError: 404 if no requests exist for the token
+        """
+        token = token_id or self.token or load_last_token()
+        if not token:
+            raise ValueError("Token ID is required")
+
+        params = {}
+        if secret or self.secret:
+            params["secret"] = secret or self.secret
+
+        return self._request(
+            "GET", f"/api/llm/token/{quote(token)}/latest", params=params
+        )
+
+    def update_token(
+        self,
+        token_id: Optional[str] = None,
+        response_enabled: Optional[bool] = None,
+        response_status: Optional[int] = None,
+        response_headers: Optional[str] = None,
+        response_body: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Update token response settings.
+
+        Args:
+            token_id: Token ID (UUID or 8-char friendlyId). Uses default if not provided.
+            response_enabled: Enable/disable custom responses
+            response_status: HTTP status code (default: 200)
+            response_headers: JSON string of headers or None
+            response_body: Response body content or None
+
+        Returns:
+            Success response {"ok": true}
+        """
+        token = token_id or self.token or load_last_token()
+        if not token:
+            raise ValueError("Token ID is required")
+
+        data = {}
+        if response_enabled is not None:
+            data["responseEnabled"] = response_enabled
+        if response_status is not None:
+            data["responseStatus"] = response_status
+        if response_headers is not None:
+            data["responseHeaders"] = response_headers
+        if response_body is not None:
+            data["responseBody"] = response_body
+
+        if not data:
+            raise ValueError("At least one update parameter must be provided")
+
+        return self._request("PATCH", f"/api/llm/token/{quote(token)}", data=data)
+
+    def delete_token(self, token_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Delete a token and all its associated requests.
+
+        Args:
+            token_id: Token ID (UUID or 8-char friendlyId). Uses default if not provided.
+
+        Returns:
+            Success response {"ok": true}
+        """
+        token = token_id or self.token or load_last_token()
+        if not token:
+            raise ValueError("Token ID is required")
+
+        return self._request("DELETE", f"/api/llm/token/{quote(token)}")
+
+
+def format_request(request: Dict[str, Any], verbose: bool = False) -> str:
+    """Format a request for display."""
+    lines = [
+        f"Method: {request['method']}",
+        f"URL: {request['url']}",
+        f"Content-Type: {request['contentType']}",
+        f"Content-Length: {request['contentLength']} bytes",
+        f"Binary: {request['isBinary']}",
+        f"Client IP: {request['clientIp']}",
+        f"Remote IP: {request['remoteIp']}",
+        f"Created: {request['createdAt']}",
+    ]
+
+    if verbose:
+        lines.append("\nHeaders:")
+        for key, value in request.get("headers", {}).items():
+            lines.append(f"  {key}: {value}")
+
+        if request.get("body"):
+            lines.append(f"\nBody:\n{request['body']}")
+
+    return "\n".join(lines)
+
+
+def main():
+    """CLI entry point."""
+    parser = argparse.ArgumentParser(
+        description="HTTP Inspector LLM API Client",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Environment Variables:
+  HTTP_INSPECTOR_URL       Base URL (default: http://localhost:3000)
+  HTTP_INSPECTOR_TOKEN     Default token ID
+  HTTP_INSPECTOR_SECRET    Secret for user tokens
+  HTTP_INSPECTOR_INSECURE  Skip SSL verification (true/false)
+
+Examples:
+  # Get API info
+  %(prog)s info
+
+  # Create a new token
+  %(prog)s create
+
+  # Get token details and all requests
+  %(prog)s get <token-id>
+
+  # Get latest request
+  %(prog)s latest <token-id>
+
+  # Update token response settings
+  %(prog)s update <token-id> --status 201 --body "Created"
+
+  # Delete a token
+  %(prog)s delete <token-id>
+
+  # Use environment variables
+  export HTTP_INSPECTOR_URL=http://localhost:3000
+  export HTTP_INSPECTOR_TOKEN=abc12345
+  %(prog)s latest
+
+  # Skip SSL verification for self-signed certificates
+  export HTTP_INSPECTOR_INSECURE=true
+  %(prog)s info
+        """,
+    )
+
+    parser.add_argument(
+        "-u",
+        "--url",
+        help="HTTP Inspector base URL (default: from env or localhost:3000)",
+    )
+    parser.add_argument(
+        "-t", "--token", help="Token ID for operations (default: from env)"
+    )
+    parser.add_argument(
+        "-s", "--secret", help="Secret for user tokens (default: from env)"
+    )
+    parser.add_argument(
+        "-k",
+        "--insecure",
+        action="store_true",
+        help="Skip SSL certificate verification (default: from env)",
+    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    parser.add_argument("--json", action="store_true", help="Output raw JSON response")
+
+    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
+
+    # Info command
+    subparsers.add_parser("info", help="Get API information")
+
+    # Create command
+    subparsers.add_parser("create", help="Create a new token")
+
+    # Get command
+    get_parser = subparsers.add_parser("get", help="Get token and all requests")
+    get_parser.add_argument(
+        "token_id", nargs="?", help="Token ID (optional if set in env)"
+    )
+
+    # Latest command
+    latest_parser = subparsers.add_parser("latest", help="Get latest request")
+    latest_parser.add_argument(
+        "token_id", nargs="?", help="Token ID (optional if set in env)"
+    )
+
+    # Update command
+    update_parser = subparsers.add_parser("update", help="Update token settings")
+    update_parser.add_argument(
+        "token_id", nargs="?", help="Token ID (optional if set in env)"
+    )
+    update_parser.add_argument(
+        "--enabled", type=bool, help="Enable custom responses (true/false)"
+    )
+    update_parser.add_argument("--status", type=int, help="HTTP status code")
+    update_parser.add_argument("--headers", help="Response headers (JSON string)")
+    update_parser.add_argument("--body", help="Response body")
+
+    # Delete command
+    delete_parser = subparsers.add_parser("delete", help="Delete token")
+    delete_parser.add_argument(
+        "token_id", nargs="?", help="Token ID (optional if set in env)"
+    )
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        return 1
+
+    # Initialize client
+    client = HTTPInspectorClient(
+        base_url=args.url, token=args.token, secret=args.secret, insecure=args.insecure
+    )
+
+    try:
+        result = None
+
+        if "info" == args.command:
+            result = client.get_api_info()
+            if args.json:
+                print(json.dumps(result, indent=2))
+            else:
+                print(f"Name: {result['name']}")
+                print(f"Version: {result['version']}")
+                print(f"Description: {result['description']}")
+                print("\nEndpoints:")
+                for endpoint in result["endpoints"]:
+                    print(f"  {endpoint['method']} {endpoint['path']}")
+                    print(f"    {endpoint['description']}")
+
+        elif "create" == args.command:
+            result = client.create_token()
+            save_last_token(result)
+            if args.json:
+                print(json.dumps(result, indent=2))
+            else:
+                print("Token created successfully!")
+                print(f"Token: {result.get('friendlyId', result['id'])}")
+                print(f"Payload URL: {result['payloadUrl']}")
+                print("\nSend requests to the URL above to capture them.")
+
+        elif "get" == args.command:
+            result = client.get_token(token_id=args.token_id)
+            if args.json:
+                print(json.dumps(result, indent=2))
+            else:
+                token = result["token"]
+                print(f"Token: {token.get('friendlyId', token['id'])}")
+                print(f"Payload URL: {token['payloadUrl']}")
+                print(f"Created: {token['createdAt']}")
+                print(f"\nTotal Requests: {result['total']}")
+                if result["requests"]:
+                    print("\nRequests:")
+                    for req in result["requests"]:
+                        print(f"\n{'-' * 60}")
+                        print(format_request(req, verbose=args.verbose))
+
+        elif "latest" == args.command:
+            result = client.get_latest_request(token_id=args.token_id)
+            if args.json:
+                print(json.dumps(result, indent=2))
+            else:
+                print("Latest Request:")
+                print(format_request(result, verbose=True))
+
+        elif "update" == args.command:
+            result = client.update_token(
+                token_id=args.token_id,
+                response_enabled=args.enabled,
+                response_status=args.status,
+                response_headers=args.headers,
+                response_body=args.body,
+            )
+            if args.json:
+                print(json.dumps(result, indent=2))
+            else:
+                print("Token updated successfully!")
+
+        elif "delete" == args.command:
+            result = client.delete_token(token_id=args.token_id)
+            if args.json:
+                print(json.dumps(result, indent=2))
+            else:
+                print("Token deleted successfully!")
+
+        return 0
+
+    except HTTPError as e:
+        if not args.json:
+            print(f"Error: HTTP {e.code}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        if not args.json:
+            print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

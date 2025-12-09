@@ -90,7 +90,7 @@ export default defineEventHandler(() => {
       {
         method: 'PATCH',
         path: '/api/llm/token/:token',
-        description: 'Update token response settings (LLM tokens only)',
+        description: 'Update token response settings',
         parameters: {
           token: 'Token ID (UUID) or friendlyId (8-char)',
         },
@@ -108,7 +108,7 @@ export default defineEventHandler(() => {
       {
         method: 'DELETE',
         path: '/api/llm/token/:token',
-        description: 'Delete a token and all its associated requests (LLM tokens only)',
+        description: 'Delete a token and all its associated requests',
         parameters: {
           token: 'Token ID (UUID) or friendlyId (8-char)',
         },
