@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { getSession } from '../../server/lib/session'
+import { getSession, getOrCreateSession, setSession, LLM_SESSION_ID, LLM_SESSION_FRIENDLY_ID } from '../../server/lib/session'
 import { getDb } from '../../server/db'
 import { sessions } from '../../server/db/schema'
 import { randomUUID } from 'crypto'
 import { createTestDb, type TestDbContext } from '../utils/testDb'
+import createH3Event from '../utils/createH3Event'
 
 describe('session', () => {
     let testDb: TestDbContext
@@ -119,6 +120,39 @@ describe('session', () => {
             const session = await getSession(sessionId)
 
             expect(session?.friendlyId).toBe(friendlyId)
+        })
+    })
+
+    describe('LLM session protection', () => {
+        it('should prevent using LLM session ID via cookie', async () => {
+            const db = getDb(testDb.dbFile)
+            
+            // Create the LLM session first
+            await db.insert(sessions).values({
+                id: LLM_SESSION_ID,
+                friendlyId: LLM_SESSION_FRIENDLY_ID,
+                createdAt: new Date(),
+                lastAccessedAt: new Date(),
+            })
+
+            // Try to use LLM session via cookie
+            const event = createH3Event()
+            event.node.req.headers.cookie = `session=${LLM_SESSION_ID}`
+
+            const sessionId = await getOrCreateSession(event)
+
+            // Should have created a new session instead of using LLM session
+            expect(sessionId).not.toBe(LLM_SESSION_ID)
+        })
+
+        it('should prevent setting LLM session via setSession', async () => {
+            // LLM session already exists from previous test
+
+            const event = createH3Event()
+            const result = await setSession(event, LLM_SESSION_FRIENDLY_ID)
+
+            // Should return false (rejected)
+            expect(result).toBe(false)
         })
     })
 })

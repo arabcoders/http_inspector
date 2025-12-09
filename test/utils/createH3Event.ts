@@ -20,6 +20,7 @@ export type TestH3Event = {
   }
   context?: Record<string, unknown>
   cookies?: Record<string, string>  // Add cookies support
+  query?: Record<string, string | string[]>  // Add query params support
   [k: string]: unknown
 }
 
@@ -104,7 +105,13 @@ export function createH3Event(overrides?: Partial<TestH3Event> | Partial<H3Event
   const mutableBase = base as { method: string } & typeof base
   mutableBase.method = (base.node.req.method || 'GET').toUpperCase() as typeof base.method
 
-  const { node: _node, cookies: _cookies, ...rest } = maybeTestEvent
+  // Handle query parameters from overrides
+  if (maybeTestEvent.query) {
+    // Store query params on the event for getQuery() to access
+    Object.assign(base, { __query: maybeTestEvent.query })
+  }
+
+  const { node: _node, cookies: _cookies, query: _query, ...rest } = maybeTestEvent
   return Object.assign(mutableBase, rest, { _cookieStore: cookieStore }) as H3Event
 }
 

@@ -11,7 +11,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
 
   const pathname = event.path || event.node?.req.url || ''
 
-  const PUBLIC_PATHS = [
+    const PUBLIC_PATHS = [
     '/_nuxt/',
     '/static/',
     '/apple-touch-icon.png',
@@ -21,9 +21,8 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     '/robots.txt',
     '/manifest.webmanifest',
     '/web-app-manifest-192x192.png',
-    '/web-app-manifest-512x512.png',
     '/api/payload/',
-    '/api/view/',
+    '/api/llm',
     '/api/auth/',
     '/login',
   ]

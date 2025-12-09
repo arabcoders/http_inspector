@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 
 const sessionRestoreEnabled = process.env.SESSION_RESTORE_ENABLED !== 'false'
+const llmEndpointEnabled = process.env.ENABLE_LLM_ENDPOINT === 'true'
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
@@ -35,8 +36,10 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     sessionRestoreEnabled,
+    llmEndpointEnabled,
     public: {
       sessionRestoreEnabled,
+      llmEndpointEnabled,
     },
   },
 

@@ -32,7 +32,7 @@
             </div>
           </div>
           <div class="grid gap-6 px-6 pb-6 lg:p-6">
-            <ApiUrlsCard :token-id="tokenId" />
+            <ApiUrlsCard v-if="llmEndpointEnabled" :token-id="tokenId" />
             <ResponseSettingsCard :token-id="tokenId" />
             <RawRequestCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
             <RequestDetailsCard :request="selectedRequest" :request-number="selectedRequestNumber"
@@ -77,6 +77,8 @@ const requestsStore = useRequestsStore()
 const { data: requests } = requestsStore.useRequestsList(tokenId)
 const { mutateAsync: deleteRequestMutation } = requestsStore.useDeleteRequest()
 const { mutateAsync: deleteAllRequestsMutation } = requestsStore.useDeleteAllRequests()
+
+const llmEndpointEnabled = useRuntimeConfig().public?.llmEndpointEnabled === true
 
 const selectedRequestId = ref<string | null>(null)
 const incomingIds = ref<Set<string>>(new Set())
@@ -159,8 +161,6 @@ const handleDeleteRequest = async (id: string) => {
       const firstRequest = requests.value && requests.value.length > 0 ? requests.value[0] : null
       selectedRequestId.value = firstRequest ? firstRequest.id : null
     }
-
-    notify({ title: 'Request deleted', variant: 'success' })
   } catch (error) {
     console.error('Failed to delete request:', error)
     notify({ title: 'Failed to delete request', variant: 'error' })
@@ -175,7 +175,6 @@ const copyPayloadURL = async () => {
   try {
     await copyText(url)
     copyState.value = 'copied'
-    notify({ title: 'Payload URL copied', description: url, variant: 'success' })
     setTimeout(() => copyState.value = 'idle', 1200)
   } catch (error) {
     console.error('Failed to copy URL:', error)

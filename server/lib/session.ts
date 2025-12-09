@@ -10,10 +10,50 @@ import { eq } from 'drizzle-orm'
 const SESSION_COOKIE_NAME = 'session'
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60 // 30 days in seconds
 
+/**
+ * Static session ID for LLM API operations
+ * This session is used for all LLM-created tokens to keep them separate from user sessions
+ */
+export const LLM_SESSION_ID = '00000000-0000-0000-0000-000000000000'
+export const LLM_SESSION_FRIENDLY_ID = 'llm-api'
+
 export const getOrCreateSession = async (event: H3Event): Promise<string> => {
   const existingSessionId = getCookie(event, SESSION_COOKIE_NAME)
 
   if (existingSessionId) {
+    // Prevent using the static LLM session via cookie
+    if (existingSessionId === LLM_SESSION_ID) {
+      // Create a new session instead
+      const id = randomUUID()
+      const db = getDb()
+      const now = new Date()
+
+      const friendlyId = await generateUniqueFriendlyId(async friendlyIdCandidate => {
+        const result = await db
+          .select()
+          .from(sessions)
+          .where(eq(sessions.friendlyId, friendlyIdCandidate))
+          .limit(1)
+        return result.length > 0
+      })
+
+      await db.insert(sessions).values({
+        id,
+        friendlyId,
+        createdAt: now,
+        lastAccessedAt: now,
+      })
+
+      setCookie(event, SESSION_COOKIE_NAME, id, {
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: SESSION_MAX_AGE,
+        path: '/',
+      })
+
+      return id
+    }
+
     const db = getDb()
     const result = await db
       .select()
@@ -74,6 +114,11 @@ export const setSession = async (event: H3Event, friendlyId: string): Promise<bo
     return false
   }
 
+  // Prevent setting the static LLM session via cookie
+  if (friendlyId === LLM_SESSION_FRIENDLY_ID) {
+    return false
+  }
+
   const result = await db
     .select({ id: sessions.id })
     .from(sessions)
@@ -126,3 +171,38 @@ export const deleteSession = async (event: H3Event): Promise<void> => {
     path: '/',
   })
 }
+
+/**
+ * Ensure the static LLM session exists in the database
+ * 
+ * This should be called when the LLM API is accessed to ensure
+ * the special LLM session is available
+ */
+export const ensureLLMSession = async (): Promise<void> => {
+  const db = getDb()
+  
+  const result = await db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.id, LLM_SESSION_ID))
+    .limit(1)
+  
+  if (result.length) {
+    // Update last accessed time
+    await db
+      .update(sessions)
+      .set({ lastAccessedAt: new Date() })
+      .where(eq(sessions.id, LLM_SESSION_ID))
+    return
+  }
+  
+  // Create the LLM session
+  const now = new Date()
+  await db.insert(sessions).values({
+    id: LLM_SESSION_ID,
+    friendlyId: LLM_SESSION_FRIENDLY_ID,
+    createdAt: now,
+    lastAccessedAt: now,
+  })
+}
+

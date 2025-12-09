@@ -1,5 +1,6 @@
-import { defineEventHandler, getQuery, createError, type H3Event, type EventHandlerRequest } from 'h3'
+import { defineEventHandler, createError, getQuery, type H3Event, type EventHandlerRequest } from 'h3'
 import { useDatabase } from '~~/server/lib/db'
+import { LLM_SESSION_ID } from '~~/server/lib/session'
 import { isUUID } from '~~/server/lib/utils'
 import type { Request } from '~~/shared/types'
 
@@ -18,20 +19,6 @@ interface LLMRequest {
   clientIp: string
   remoteIp: string
   createdAt: string
-}
-
-/**
- * LLM-friendly API response
- */
-interface LLMResponse {
-  token: {
-    id: string
-    friendlyId: string | null
-    createdAt: string
-    payloadUrl: string
-  }
-  requests: LLMRequest[]
-  total: number
 }
 
 /**
@@ -77,18 +64,13 @@ const formatRequestForLLM = async (request: Request, db: ReturnType<typeof useDa
 }
 
 /**
- * API endpoint for automation/LLM access to token requests
+ * Get Latest Request for Token
  * 
- * URL: /api/view/{friendlyId}?secret={tokenUUID}
- * 
- * - friendlyId: The 8-character short ID of the token
- * - secret: Must be the full token UUID (token.id) for authentication
- * 
- * Returns LLM-friendly JSON with all requests and their bodies
+ * GET /api/llm/token/:token/latest - Get the most recent request
  */
 export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) => {
   const method = event.node.req.method?.toUpperCase() || 'GET'
-  
+
   if ('GET' !== method) {
     throw createError({ statusCode: 405, message: 'Method not allowed' })
   }
@@ -96,64 +78,53 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   type EventContextParams = { params?: Record<string, string> }
   const ctx = (event.context as unknown as EventContextParams) || {}
   const params = ctx.params || {}
-  const shortId = params.shortId
+  const tokenParam = params.token
 
-  if (!shortId) {
-    throw createError({ statusCode: 400, message: 'Short ID is required' })
-  }
-
-  const query = getQuery(event)
-  const secret = query.secret as string | undefined
-
-  if (!secret) {
-    throw createError({ statusCode: 401, message: 'Secret parameter is required' })
-  }
-
-  // Secret must be a valid UUID
-  if (!isUUID(secret)) {
-    throw createError({ statusCode: 401, message: 'Invalid secret format' })
+  if (!tokenParam) {
+    throw createError({ statusCode: 400, message: 'Token parameter is required' })
   }
 
   const db = useDatabase()
-  
-  // Only accept friendlyId (short ID) in the URL path
-  const token = await db.tokens.getByFriendlyId(shortId)
+  const query = getQuery(event)
+  const secret = query.secret as string | undefined
+
+  // Support both UUID (full token ID) and friendlyId (short 8-char)
+  let token
+  if (isUUID(tokenParam)) {
+    token = await db.tokens.get(LLM_SESSION_ID, tokenParam)
+  } else {
+    token = await db.tokens.getByFriendlyId(tokenParam)
+    
+    if (token) {
+      // If token is in LLM session, allow access without secret
+      if (token.sessionId === LLM_SESSION_ID) {
+        // LLM token - no secret needed
+      } else {
+        // User token - require secret parameter for read-only access
+        if (!secret || secret !== token.id) {
+          throw createError({ 
+            statusCode: 401, 
+            message: 'Authentication required: Invalid secret parameter' 
+          })
+        }
+      }
+    }
+  }
+
   if (!token) {
     throw createError({ statusCode: 404, message: 'Token not found' })
   }
 
-  // Verify that the secret matches the token ID
-  if (token.id !== secret) {
-    throw createError({ statusCode: 403, message: 'Invalid secret' })
-  }
-
-  // Fetch all requests for this token
+  // Fetch all requests for this token (they're already ordered by createdAt DESC)
   const requests = await db.requests.list(token.sessionId, token.id)
 
-  // Format requests for LLM consumption
-  const formattedRequests: LLMRequest[] = []
-  for (const request of requests) {
-    const formatted = await formatRequestForLLM(request, db)
-    formattedRequests.push(formatted)
+  if (0 === requests.length) {
+    throw createError({ statusCode: 404, message: 'No requests found for this token' })
   }
 
-  // Build payload URL for webhook ingestion
-  // Try to get from request headers, fallback to config or localhost
-  const host = event.node.req.headers.host || 'localhost:3000'
-  const protocol = event.node.req.headers['x-forwarded-proto'] || 'http'
-  const baseUrl = `${protocol}://${host}`
-  const payloadUrl = `${baseUrl}/api/payload/${token.friendlyId || token.id}`
+  // Get the first one (most recent)
+  const latestRequest = requests[0]
+  const formatted = await formatRequestForLLM(latestRequest, db)
 
-  const response: LLMResponse = {
-    token: {
-      id: token.id,
-      friendlyId: token.friendlyId,
-      createdAt: token.createdAt.toISOString(),
-      payloadUrl,
-    },
-    requests: formattedRequests,
-    total: formattedRequests.length,
-  }
-
-  return response
+  return formatted
 })

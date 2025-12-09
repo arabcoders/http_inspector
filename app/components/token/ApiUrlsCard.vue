@@ -16,7 +16,6 @@
         </template>
 
         <div v-if="isOpen" class="flex flex-col gap-4 p-4 border-t border-gray-200 dark:border-gray-700">
-            <!-- Payload URL -->
             <div class="space-y-2">
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Webhook URL
@@ -24,11 +23,8 @@
                 <div class="flex gap-2">
                     <UInput :model-value="payloadUrl" readonly size="md" class="flex-1 font-mono text-xs" />
                     <UTooltip :text="copyPayloadState === 'copied' ? 'Copied!' : 'Copy URL'">
-                        <UButton 
-                            :icon="copyPayloadState === 'copied' ? 'i-lucide-check' : 'i-lucide-copy'"
-                            color="neutral" 
-                            variant="soft"
-                            @click="handleCopyPayload" />
+                        <UButton :icon="copyPayloadState === 'copied' ? 'i-lucide-check' : 'i-lucide-copy'"
+                            color="neutral" variant="soft" @click="handleCopyPayload" />
                     </UTooltip>
                 </div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
@@ -36,7 +32,6 @@
                 </p>
             </div>
 
-            <!-- View API URL -->
             <div class="space-y-2">
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Automation API URL
@@ -44,15 +39,12 @@
                 <div class="flex gap-2">
                     <UInput :model-value="viewUrl" readonly size="md" class="flex-1 font-mono text-xs" />
                     <UTooltip :text="copyViewState === 'copied' ? 'Copied!' : 'Copy URL'">
-                        <UButton 
-                            :icon="copyViewState === 'copied' ? 'i-lucide-check' : 'i-lucide-copy'"
-                            color="neutral" 
-                            variant="soft"
-                            @click="handleCopyView" />
+                        <UButton :icon="copyViewState === 'copied' ? 'i-lucide-check' : 'i-lucide-copy'" color="neutral"
+                            variant="soft" @click="handleCopyView" />
                     </UTooltip>
                 </div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
-                    Read-only API for automation/LLMs. Returns all requests with bodies in JSON format.
+                    Read-only API for automation/LLMs.
                 </p>
             </div>
         </div>
@@ -83,14 +75,13 @@ const payloadUrl = computed(() => {
 
 const viewUrl = computed(() => {
     const friendlyId = token.value?.friendlyId || ''
-    return `${origin.value}/api/view/${friendlyId}?secret=${props.tokenId}`
+    return `${origin.value}/api/llm/token/${friendlyId}?secret=${props.tokenId}`
 })
 
 const handleCopyPayload = async () => {
     try {
         await copyText(payloadUrl.value)
         copyPayloadState.value = 'copied'
-        notify({ title: 'Webhook URL copied', description: payloadUrl.value, variant: 'success' })
         setTimeout(() => copyPayloadState.value = 'idle', 1200)
     } catch (error) {
         console.error('Failed to copy URL:', error)
@@ -102,7 +93,6 @@ const handleCopyView = async () => {
     try {
         await copyText(viewUrl.value)
         copyViewState.value = 'copied'
-        notify({ title: 'API URL copied', description: viewUrl.value, variant: 'success' })
         setTimeout(() => copyViewState.value = 'idle', 1200)
     } catch (error) {
         console.error('Failed to copy URL:', error)
