@@ -1,18 +1,17 @@
-FROM node:20-bullseye-slim AS base
+FROM oven/bun:1.4.2 AS base
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN npm install -g pnpm
-RUN pnpm install --frozen-lockfile --prefer-offline
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
 # Copy the rest of the app and build
 COPY . .
 
 ENV NODE_ENV=production
-RUN pnpm build
+RUN bun run build
 
-FROM node:20-bullseye-slim
+FROM oven/bun:1.4.2
 
 WORKDIR /app
 
@@ -27,4 +26,4 @@ RUN mkdir -p /config
 
 EXPOSE 3000
 
-CMD ["/usr/local/bin/node", "/app/server/index.mjs"]
+CMD ["bun", "/app/server/index.mjs"]

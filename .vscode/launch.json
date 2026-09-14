@@ -7,7 +7,7 @@
             "runtimeArgs": [
                 "dev"
             ],
-            "runtimeExecutable": "pnpm",
+            "runtimeExecutable": "bun",
             "type": "node",
             "cwd": "${workspaceFolder}",
             "console": "internalConsole",

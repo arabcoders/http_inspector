@@ -46,7 +46,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
   const ctx = (event.context as unknown as EventContextParams) || {}
   const params = ctx.params || {}
   let tokenId = params.token as string | undefined
-  let sessionId: string | null = null
+  let sessionId: string | null
   const db = useDatabase()
 
   if (!tokenId) {
