@@ -1,5 +1,5 @@
-import Database from 'better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { Database } from 'bun:sqlite'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
 import * as schema from './schema'
 import { join } from 'path'
 
@@ -20,8 +20,8 @@ export const getDb = (dbFile?: string, newClient: boolean = false) => {
     }
 
     const sqlite = new Database(dbPath)
-    sqlite.pragma('journal_mode = WAL')
-    sqlite.pragma('foreign_keys = ON')
+    sqlite.run('PRAGMA journal_mode = WAL')
+    sqlite.run('PRAGMA foreign_keys = ON')
     _db = drizzle(sqlite, { schema })
     console.debug('Database connected:', dbPath)
     return _db

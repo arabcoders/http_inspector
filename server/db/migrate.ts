@@ -1,6 +1,6 @@
-import Database from 'better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
-import { migrate as drizzleMigrate } from 'drizzle-orm/better-sqlite3/migrator'
+import { Database } from 'bun:sqlite'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
+import { migrate as drizzleMigrate } from 'drizzle-orm/bun-sqlite/migrator'
 import { join } from 'path'
 
 export async function runMigrations(dbFile?: string): Promise<void> {

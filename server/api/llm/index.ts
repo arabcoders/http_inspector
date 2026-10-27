@@ -11,7 +11,7 @@ import { defineEventHandler } from 'h3'
 export default defineEventHandler(() => {
   return {
     name: 'HTTP Inspector LLM API',
-    version: '1.0.0',
+    version: '1.1.0',
     description: 'API endpoints designed for programmatic access by LLMs and automation tools',
     endpoints: [
       {
@@ -63,6 +63,68 @@ export default defineEventHandler(() => {
           total: 'Total number of requests',
         },
         notes: 'LLM tokens: no secret needed. User tokens: require ?secret=UUID for read-only access',
+      },
+      {
+        method: 'GET',
+        path: '/api/llm/token/:token/requests',
+        description: 'List captured requests',
+        parameters: {
+          token: 'Token ID (UUID) or friendlyId (8-char)',
+          secret: 'Required query param when accessing user tokens (e.g., ?secret=UUID)',
+        },
+        response: {
+          requests: [{
+            id: 'Request UUID',
+            method: 'HTTP method',
+            url: 'Full URL',
+            contentType: 'Content-Type header',
+            contentLength: 'Body size in bytes',
+            isBinary: 'Boolean',
+            clientIp: 'Client IP address',
+            remoteIp: 'Remote IP address',
+            createdAt: 'ISO timestamp',
+          }],
+          total: 'Total number of requests',
+        },
+      },
+      {
+        method: 'GET',
+        path: '/api/llm/token/:token/requests/:request',
+        description: 'Get one captured request with headers and body',
+        parameters: {
+          token: 'Token ID (UUID) or friendlyId (8-char)',
+          request: 'Request UUID',
+          secret: 'Required query param when accessing user tokens (e.g., ?secret=UUID)',
+        },
+        response: {
+          id: 'Request UUID',
+          method: 'HTTP method',
+          url: 'Full URL',
+          headers: 'Headers object',
+          contentType: 'Content-Type header',
+          contentLength: 'Body size in bytes',
+          isBinary: 'Boolean',
+          body: 'Request body as string or null',
+          clientIp: 'Client IP address',
+          remoteIp: 'Remote IP address',
+          createdAt: 'ISO timestamp',
+        },
+      },
+      {
+        method: 'GET',
+        path: '/api/llm/token/:token/requests/:request/body',
+        description: 'Get one captured request body as text or hexadecimal binary data',
+        parameters: {
+          token: 'Token ID (UUID) or friendlyId (8-char)',
+          request: 'Request UUID',
+          secret: 'Required query param when accessing user tokens (e.g., ?secret=UUID)',
+        },
+        response: {
+          contentType: 'Request content type',
+          isBinary: 'Boolean',
+          text: 'Text body when isBinary is false',
+          hex: 'Hexadecimal body when isBinary is true',
+        },
       },
       {
         method: 'GET',

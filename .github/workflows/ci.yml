@@ -11,8 +11,7 @@ on:
             - ".github/ISSUE_TEMPLATE/**"
 
 env:
-    PNPM_VERSION: 10
-    NODE_VERSION: 20
+    BUN_VERSION: 1.4.2
 
 jobs:
     build-and-test:
@@ -20,29 +19,22 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            - name: Install pnpm
-              uses: pnpm/action-setup@v4
+            - name: Install Bun
+              uses: oven-sh/setup-bun@v2
               with:
-                  version: ${{ env.PNPM_VERSION }}
-
-            - name: Install Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: ${{ env.NODE_VERSION }}
-                  cache: pnpm
-                  cache-dependency-path: "pnpm-lock.yaml"
+                  bun-version: ${{ env.BUN_VERSION }}
 
             - name: Install dependencies
-              run: pnpm install --frozen-lockfile
+              run: bun install --frozen-lockfile
 
             - name: Run Lint
-              run: pnpm lint
+              run: bun run lint
 
             - name: Run tests
-              run: pnpm test
+              run: bun run test
             
             - name: Run type-check
-              run: pnpm tsc
+              run: bun run tsc
 
             - name: Build
-              run: pnpm build
+              run: bun run build

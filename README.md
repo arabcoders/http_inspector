@@ -501,6 +501,53 @@ Get token details and all captured requests.
 
 **Notes:** Binary data in request bodies is marked as `[Binary data not included]`.
 
+#### GET /api/llm/token/:token/requests
+List captured requests. Use a returned request UUID with the single-request
+endpoint when its headers or body are needed.
+
+**Parameters:**
+- `:token` - Token ID (UUID) or friendlyId (8-char)
+- `?secret=UUID` - Required for user tokens (read-only access)
+
+**Response:**
+```json
+{
+  "requests": [
+    {
+      "id": "650e8400-e29b-41d4-a716-446655440000",
+      "method": "POST",
+      "url": "/api/payload/abc12345?test=1",
+      "contentType": "application/json",
+      "contentLength": 42,
+      "isBinary": false,
+      "clientIp": "192.168.1.100",
+      "remoteIp": "203.0.113.1",
+      "createdAt": "2025-01-15T10:30:00.000Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+#### GET /api/llm/token/:token/requests/:request
+Get one captured request, including parsed headers and its text body.
+
+**Parameters:**
+- `:token` - Token ID (UUID) or friendlyId (8-char)
+- `:request` - Request UUID from the request list
+- `?secret=UUID` - Required for user tokens (read-only access)
+
+**Response:** Single request object in the aggregate response format above.
+Binary bodies are represented as `[Binary data not included]`.
+
+#### GET /api/llm/token/:token/requests/:request/body
+Get a request body separately. Text bodies are returned in `text`; binary
+bodies are returned as hexadecimal in `hex`. The response also includes
+`contentType` and `isBinary`.
+
+This endpoint accepts the same `:token`, `:request`, and `?secret=UUID`
+parameters as the single-request endpoint.
+
 #### GET /api/llm/token/:token/latest
 Get the most recent request for a token.
 

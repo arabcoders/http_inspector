@@ -29,6 +29,8 @@ interface TokenResponse {
   responseBody: string | null
 }
 
+const originalStoragePath = process.env.STORAGE_PATH
+
 describe('LLM API', () => {
   let db: ReturnType<typeof useDatabase>
   let testDbContext: TestDbContext
@@ -36,9 +38,13 @@ describe('LLM API', () => {
   let tokenIndexHandler: (event: H3Event) => Promise<unknown>
   let tokenHandler: (event: H3Event) => Promise<unknown>
   let latestHandler: (event: H3Event) => Promise<unknown>
+  let requestListHandler: (event: H3Event) => Promise<unknown>
+  let requestHandler: (event: H3Event) => Promise<unknown>
+  let requestBodyHandler: (event: H3Event) => Promise<unknown>
 
   beforeEach(async () => {
     testDbContext = await createTestDb()
+    process.env.STORAGE_PATH = testDbContext.filesPath
     db = useDatabase(testDbContext.dbFile, testDbContext.filesPath)
     await ensureLLMSession()
     
@@ -47,10 +53,15 @@ describe('LLM API', () => {
     tokenIndexHandler = (await import('../../server/api/llm/token/index')).default
     tokenHandler = (await import('../../server/api/llm/token/[token]/index')).default
     latestHandler = (await import('../../server/api/llm/token/[token]/latest')).default
+    requestListHandler = (await import('../../server/api/llm/token/[token]/requests/index')).default
+    requestHandler = (await import('../../server/api/llm/token/[token]/requests/[request]')).default
+    requestBodyHandler = (await import('../../server/api/llm/token/[token]/requests/[request]/body')).default
   })
 
   afterEach(async () => {
     await testDbContext.cleanup()
+    if (originalStoragePath === undefined) delete process.env.STORAGE_PATH
+    else process.env.STORAGE_PATH = originalStoragePath
   })
 
   describe('GET /api/llm', () => {
@@ -74,6 +85,9 @@ describe('LLM API', () => {
       expect(endpointPaths).toContain('/api/llm/token')
       expect(endpointPaths).toContain('/api/llm/token/:token')
       expect(endpointPaths).toContain('/api/llm/token/:token/latest')
+      expect(endpointPaths).toContain('/api/llm/token/:token/requests')
+      expect(endpointPaths).toContain('/api/llm/token/:token/requests/:request')
+      expect(endpointPaths).toContain('/api/llm/token/:token/requests/:request/body')
     })
   })
 
@@ -391,6 +405,84 @@ describe('LLM API', () => {
       const event = createH3Event({ context: { params: { token: 'test' } } })
       event.node.req.method = 'POST'
       await expect(latestHandler(event)).rejects.toThrow('Method not allowed')
+    })
+  })
+
+  describe('LLM request reads', () => {
+    it('should list captured requests', async () => {
+      const createEvent = createH3Event()
+      createEvent.node.req.method = 'POST'
+      const token = await tokenIndexHandler(createEvent) as TokenResponse
+      const created = await db.requests.create(
+        LLM_SESSION_ID,
+        token.id,
+        'POST',
+        { 'content-type': 'application/json', 'x-test': 'list' },
+        Buffer.from('{"event":"listed"}'),
+        '/api/payload/test',
+        '127.0.0.1',
+        '192.0.2.1'
+      )
+
+      const event = createH3Event({ context: { params: { token: token.id } } })
+      const response = await requestListHandler(event) as { requests: Record<string, unknown>[], total: number }
+
+      expect(response.total).toBe(1)
+      expect(response.requests[0].id).toBe(created.id)
+      expect(response.requests[0]).not.toHaveProperty('headers')
+      expect(response.requests[0]).not.toHaveProperty('body')
+    })
+
+    it('should get one request body', async () => {
+      const createEvent = createH3Event()
+      createEvent.node.req.method = 'POST'
+      const token = await tokenIndexHandler(createEvent) as TokenResponse
+      const created = await db.requests.create(
+        LLM_SESSION_ID,
+        token.id,
+        'POST',
+        { 'content-type': 'application/json', 'x-test': 'detail' },
+        Buffer.from('{"event":"detail"}'),
+        '/api/payload/test',
+        '127.0.0.1',
+        '192.0.2.1'
+      )
+
+      const event = createH3Event({ context: { params: { token: token.id, request: created.id } } })
+      const response = await requestHandler(event) as Record<string, unknown>
+
+      expect(response.id).toBe(created.id)
+      expect(response.headers).toEqual({ 'content-type': 'application/json', 'x-test': 'detail' })
+      expect(response.body).toBe('{"event":"detail"}')
+    })
+
+    it('should reject unknown request IDs', async () => {
+      const createEvent = createH3Event()
+      createEvent.node.req.method = 'POST'
+      const token = await tokenIndexHandler(createEvent) as TokenResponse
+      const event = createH3Event({ context: { params: { token: token.id, request: 'missing' } } })
+      await expect(requestHandler(event)).rejects.toThrow('Request not found')
+    })
+
+    it('should return binary body', async () => {
+      const createEvent = createH3Event()
+      createEvent.node.req.method = 'POST'
+      const token = await tokenIndexHandler(createEvent) as TokenResponse
+      const binary = Buffer.from([0xff, 0xd8, 0xff, 0xe0])
+      const created = await db.requests.create(
+        LLM_SESSION_ID,
+        token.id,
+        'POST',
+        { 'content-type': 'image/jpeg' },
+        binary,
+        '/api/payload/test',
+        '127.0.0.1',
+        '192.0.2.1'
+      )
+
+      const event = createH3Event({ context: { params: { token: token.id, request: created.id } } })
+      const response = await requestBodyHandler(event) as Record<string, unknown>
+      expect(response).toEqual({ contentType: 'image/jpeg', isBinary: true, hex: binary.toString('hex') })
     })
   })
 

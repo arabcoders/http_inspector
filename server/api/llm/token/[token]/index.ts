@@ -39,7 +39,7 @@ interface LLMResponse {
  * Convert Request to LLM-friendly format with body content
  */
 const formatRequestForLLM = async (request: Request, db: ReturnType<typeof useDatabase>): Promise<LLMRequest> => {
-  let parsedHeaders: Record<string, string> = {}
+  let parsedHeaders: Record<string, string>
   try {
     parsedHeaders = JSON.parse(request.headers)
   } catch {
