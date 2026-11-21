@@ -6,7 +6,7 @@ import { useNotificationBridge } from '~/composables/useNotificationBridge'
 import { useSSE } from '~/composables/useSSE'
 import { copyText } from '~/utils'
 
-const colorMode = useColorMode()
+const { theme, cycleTheme } = useTheme()
 const queryClient = useQueryClient()
 const { notify } = useNotificationBridge()
 const sse = useSSE(false)
@@ -35,16 +35,6 @@ const signOut = async () => {
   }
 }
 
-const theme = computed(() => {
-  if ('dark' === colorMode.preference) {
-    return { label: 'Dark', icon: 'i-lucide-moon', next: 'system' }
-  }
-  if ('light' === colorMode.preference) {
-    return { label: 'Light', icon: 'i-lucide-sun', next: 'dark' }
-  }
-  return { label: 'System', icon: 'i-lucide-monitor', next: 'light' }
-})
-
 const menu = computed<DropdownMenuItem[][]>(() => [
   [{ label: 'Documentation', icon: 'i-lucide-book-open', to: '/help' }],
   ...(restoreEnabled ? [[
@@ -58,7 +48,7 @@ const menu = computed<DropdownMenuItem[][]>(() => [
   [{
     label: `Theme: ${theme.value.label}`,
     icon: theme.value.icon,
-    onSelect: () => { colorMode.preference = theme.value.next },
+    onSelect: cycleTheme,
   }],
   ...(auth.value?.required ? [[{
     label: 'Sign out',
