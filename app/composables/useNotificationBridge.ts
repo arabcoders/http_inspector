@@ -99,9 +99,7 @@ const showBrowserNotification = (payload: NotificationPayload) => {
 /**
  * Show a toast notification using Nuxt UI
  */
-const showToastNotification = (payload: NotificationPayload) => {
-    const toast = useToast()
-
+const showToastNotification = (toast: ReturnType<typeof useToast>, payload: NotificationPayload) => {
     const { title, description, variant = 'default', color, icon } = payload
 
     toast.add({
@@ -117,12 +115,34 @@ const showToastNotification = (payload: NotificationPayload) => {
  * Main composable for notification bridge
  */
 export const useNotificationBridge = () => {
-    const notificationType = usePersistedState<NotificationType>('notification-type', 'toast')
-    const isMuted = usePersistedState<boolean>('notifications-muted', false)
+    const toast = useToast()
+    const notificationType = useState<NotificationType>('notification-type', () => 'toast')
+    const isMuted = useState('notifications-muted', () => false)
+    const preferencesLoaded = useState('notification-preferences-loaded', () => false)
     const browserPermission = ref<NotificationPermission>('default')
 
-    if (import.meta.client && 'Notification' in window) {
-        browserPermission.value = Notification.permission
+    onMounted(() => {
+        if ('Notification' in window) {
+            browserPermission.value = Notification.permission
+        }
+        if (preferencesLoaded.value) {
+            return
+        }
+        preferencesLoaded.value = true
+        try {
+            notificationType.value = localStorage.getItem('notification-type') === '"browser"' ? 'browser' : 'toast'
+            isMuted.value = localStorage.getItem('notifications-muted') === 'true'
+        } catch (error) {
+            console.warn('Could not load notification preferences:', error)
+        }
+    })
+
+    const savePreference = (key: string, value: NotificationType | boolean) => {
+        try {
+            localStorage.setItem(key, JSON.stringify(value))
+        } catch (error) {
+            console.warn('Could not save notification preference:', error)
+        }
     }
 
     const notify = (payload: NotificationPayload) => {
@@ -133,7 +153,7 @@ export const useNotificationBridge = () => {
         if (notificationType.value === 'browser') {
             showBrowserNotification(payload)
         } else {
-            showToastNotification(payload)
+            showToastNotification(toast, payload)
         }
     }
 
@@ -143,7 +163,7 @@ export const useNotificationBridge = () => {
             browserPermission.value = permission
 
             if ('granted' !== permission) {
-                showToastNotification({
+                showToastNotification(toast, {
                     title: 'Permission Required',
                     description: 'Please allow notifications in your browser settings to use browser notifications.',
                     variant: 'warning'
@@ -153,6 +173,7 @@ export const useNotificationBridge = () => {
         }
 
         notificationType.value = type
+        savePreference('notification-type', type)
     }
 
     const toggleNotificationType = async () => {
@@ -162,6 +183,7 @@ export const useNotificationBridge = () => {
 
     const toggleMute = () => {
         isMuted.value = !isMuted.value
+        savePreference('notifications-muted', isMuted.value)
     }
 
     const isBrowserNotificationSupported = computed(() => import.meta.client && 'Notification' in window)
@@ -179,11 +201,6 @@ export const useNotificationBridge = () => {
         isBrowserNotificationAvailable,
         browserPermission: readonly(browserPermission)
     }
-}
-
-export const notify = (payload: NotificationPayload) => {
-    const { notify } = useNotificationBridge()
-    notify(payload)
 }
 
 export default useNotificationBridge

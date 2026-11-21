@@ -45,7 +45,7 @@ export default defineEventHandler(async (event: H3Event<EventHandlerRequest>) =>
     setResponseHeader(event, 'Content-Type', contentType)
     const parts = contentType.split('/')
     if (parts.length === 2) {
-      ext = parts[1].split(';')[0] || 'bin'
+      ext = parts[1]?.split(';')[0] || 'bin'
       if (ext.length > 5) {
         ext = 'bin'
       }

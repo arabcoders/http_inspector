@@ -1,310 +1,236 @@
-<template>
-  <div class="flex h-[calc(100vh-180px)] flex-col overflow-hidden">
-    <div class="relative flex flex-1 flex-col overflow-hidden lg:flex-row">
-      <div v-if="isSidebarOpen" class="fixed inset-0 z-30 backdrop-blur-sm bg-black/40 transition-opacity lg:hidden"
-        @click="closeSidebar()" />
-      <RequestSidebar :class="[
-        'fixed inset-y-0 left-0 z-40 max-w-[20rem] shrink-0 transform shadow-xl transition-transform duration-300 ease-in-out lg:relative lg:inset-auto lg:z-auto lg:max-w-none lg:shadow-none',
-        isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      ]" :requests="requests || []" :selected-request-id="selectedRequestId" :incoming-ids="incomingIds"
-        :copy-state="copyState" show-mobile-close @close="closeSidebar" @select="handleSelectRequest"
-        @copy-url="copyPayloadURL" @clear="showClearModal = true" @ingest="showIngestModal = true"
-        @delete="handleDeleteRequest" />
-
-      <ClientOnly>
-        <main class="flex-1 overflow-y-auto bg-background">
-          <div class="flex items-center justify-between gap-3 px-6 pt-6 pb-6 lg:hidden">
-            <UButton icon="i-lucide-menu" variant="soft" color="neutral" @click="openSidebar()">
-              Requests
-            </UButton>
-            <UBadge v-if="selectedRequest" size="sm">
-              {{ requests?.length || 0 }} / {{ selectedRequestNumber }}
-            </UBadge>
-            <div class="flex gap-2">
-              <UButton type="button" variant="soft" color="primary" icon="i-lucide-upload"
-                @click="showIngestModal = true">
-                Ingest
-              </UButton>
-              <UButton type="button" variant="soft" color="error" icon="i-lucide-trash-2" :disabled="!requests?.length"
-                @click="showClearModal = true">
-                Clear
-              </UButton>
-            </div>
-          </div>
-          <div class="grid gap-6 px-6 pb-6 lg:p-6">
-            <ApiUrlsCard v-if="llmEndpointEnabled" :token-id="tokenId" />
-            <ResponseSettingsCard :token-id="tokenId" />
-            <RawRequestCard :request="selectedRequest" :request-number="selectedRequestNumber" :token-id="tokenId" />
-            <RequestDetailsCard :request="selectedRequest" :request-number="selectedRequestNumber"
-              :token-id="tokenId" />
-          </div>
-        </main>
-      </ClientOnly>
-    </div>
-
-    <ConfirmModal v-model="showClearModal" title="Clear All Requests"
-      description="Are you sure you want to delete all requests for this token? This action cannot be undone."
-      confirm-label="Clear All" @confirm="handleClearRequests" />
-
-    <IngestRequestModal v-model="showIngestModal" :token-id="tokenId" @success="handleIngestSuccess" />
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
-import type { LocationQueryRaw } from 'vue-router'
+import type { RequestSummary, SSEEventPayload } from '~~/shared/types'
+import { useNotificationBridge } from '~/composables/useNotificationBridge'
+import { useSSE } from '~/composables/useSSE'
 import { useRequestsStore } from '~/stores/requests'
 import { useTokensStore } from '~/stores/tokens'
-import { useSSE } from '~/composables/useSSE'
-import type { SSEEventPayload, RequestSummary } from '~~/shared/types'
-import { notify } from '~/composables/useNotificationBridge'
-import RequestSidebar from '~/components/RequestSidebar.vue'
-import ApiUrlsCard from '~/components/token/ApiUrlsCard.vue'
-import ResponseSettingsCard from '~/components/token/ResponseSettingsCard.vue'
-import RequestDetailsCard from '~/components/token/RequestDetailsCard.vue'
+import { shortSlug } from '~/utils'
+import { selectRequest } from '~/utils/request-presentation'
+import EndpointBar from '~/components/token/EndpointBar.vue'
 import RawRequestCard from '~/components/token/RawRequestCard.vue'
-import IngestRequestModal from '~/components/IngestRequestModal.vue'
-import { copyText, shortSlug } from '~/utils'
+import RequestDetailsCard from '~/components/token/RequestDetailsCard.vue'
+import ResponseSettingsModal from '~/components/token/ResponseSettingsModal.vue'
 
 const route = useRoute()
-
+const router = useRouter()
+const { notify } = useNotificationBridge()
+const sse = useSSE(false)
 const tokenId = computed(() => String(route.params.id || ''))
-
-const { data: token } = useTokensStore().useToken(tokenId)
-
+const tokensStore = useTokensStore()
+const { data: tokens } = tokensStore.useTokensList()
+const { data: token, isError: tokenError, refetch: retryToken } = tokensStore.useToken(tokenId)
+const { mutateAsync: deleteToken, isPending: deletingToken } = tokensStore.useDeleteToken()
 const requestsStore = useRequestsStore()
-const { data: requests } = requestsStore.useRequestsList(tokenId)
-const { mutateAsync: deleteRequestMutation } = requestsStore.useDeleteRequest()
-const { mutateAsync: deleteAllRequestsMutation } = requestsStore.useDeleteAllRequests()
+const { data: requests, isPending, isError, refetch } = requestsStore.useRequestsList(tokenId)
+const { mutateAsync: deleteRequest, isPending: deletingRequest } = requestsStore.useDeleteRequest()
+const { mutateAsync: clearRequests, isPending: clearing } = requestsStore.useDeleteAllRequests()
 
-const llmEndpointEnabled = useRuntimeConfig().public?.llmEndpointEnabled === true
+const llmEnabled = useRuntimeConfig().public.llmEndpointEnabled === true
+const tokenLabel = computed(() => token.value?.friendlyId || shortSlug(tokenId.value))
+const endpoint = computed(() => token.value?.friendlyId || tokenId.value)
+const tokenOptions = computed(() => (tokens.value || []).map(item => ({
+  label: item.friendlyId || shortSlug(item.id),
+  value: item.id,
+})))
+useHead(() => ({ title: tokenLabel.value }))
 
-const selectedRequestId = ref<string | null>(null)
-const incomingIds = ref<Set<string>>(new Set())
-const copyState = ref<'idle' | 'copied'>('idle')
-const showClearModal = ref(false)
-const showIngestModal = ref(false)
-const isSidebarOpen = useState<boolean>('token-request-sidebar-open', () => false)
-
-const selectedRequestIdRef = ref<string | null>(null)
-
-const selectedRequest = computed(() => requests.value?.find(r => r.id === selectedRequestId.value) || null)
-const selectedRequestNumber = computed(() => {
-  if (!selectedRequest.value || !requests.value) return null
-  const index = requests.value.findIndex(r => r.id === selectedRequest.value!.id)
-  return index !== -1 ? requests.value.length - index : null
-})
-
-watch(selectedRequestId, async newId => {
-  selectedRequestIdRef.value = newId
-
-  if (!import.meta.client) {
-    return
+const sidebarOpen = ref(false)
+const showClear = ref(false)
+const showDeleteToken = ref(false)
+const showDeleteRequest = ref(false)
+const showIngest = ref(false)
+const requestToDelete = ref('')
+const incomingIds = ref(new Set<string>())
+const incomingTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const selected = computed(() => selectRequest(requests.value || [], route.query.request))
+const requestNumber = computed(() => {
+  if (!requests.value || !selected.value) {
+    return null
   }
+  return requests.value.length - requests.value.findIndex(item => item.id === selected.value?.id)
+})
+const pinned = computed(() => 'string' === typeof route.query.request)
 
-  const basePath = `/token/${tokenId.value}`
+const showRequest = (id?: string) => {
+  sidebarOpen.value = false
+  return router.replace({ query: { ...route.query, request: id } })
+}
 
-  if (typeof newId === 'string') {
-    if (route.query.request !== newId) {
-      const nextQuery: LocationQueryRaw = { ...route.query, request: newId }
-      await navigateTo({ path: basePath, query: nextQuery }, { replace: true })
+const switchToken = (id: string) => {
+  if (id !== tokenId.value) {
+    return router.push(`/token/${id}`)
+  }
+}
+
+const askToDeleteRequest = (id: string) => {
+  sidebarOpen.value = false
+  requestToDelete.value = id
+  showDeleteRequest.value = true
+}
+
+const confirmDeleteRequest = async () => {
+  const id = requestToDelete.value
+  try {
+    await deleteRequest({ tokenId: tokenId.value, requestId: id })
+    showDeleteRequest.value = false
+    if (route.query.request === id) {
+      await showRequest()
     }
-  } else if (route.query.request) {
-    const nextQuery: LocationQueryRaw = { ...route.query }
-    delete nextQuery.request
-    await navigateTo({ path: basePath, query: nextQuery }, { replace: true })
+    notify({ title: 'Request deleted', color: 'success' })
+  } catch (error) {
+    console.error('Could not delete request:', error)
+    notify({ title: 'Could not delete request', color: 'error' })
   }
+}
+
+const confirmClear = async () => {
+  try {
+    await clearRequests(tokenId.value)
+    showClear.value = false
+    await showRequest()
+    notify({ title: 'Requests cleared', color: 'success' })
+  } catch (error) {
+    console.error('Could not clear requests:', error)
+    notify({ title: 'Could not clear requests', color: 'error' })
+  }
+}
+
+const confirmDeleteToken = async () => {
+  const id = tokenId.value
+  const list = tokens.value ?? []
+  const index = list.findIndex(item => item.id === id)
+  const next = -1 === index ? undefined : list[index + 1] ?? list[index - 1]
+  try {
+    await deleteToken(id)
+    showDeleteToken.value = false
+    await router.push(next ? `/token/${next.id}` : '/')
+    notify({ title: 'Token deleted', color: 'success' })
+  } catch (error) {
+    console.error('Could not delete token:', error)
+    notify({ title: 'Could not delete token', color: 'error' })
+  }
+}
+
+const resetUpdates = () => {
+  for (const timer of incomingTimers.values()) {
+    clearTimeout(timer)
+  }
+  incomingTimers.clear()
+  incomingIds.value.clear()
+}
+
+watch(tokenId, () => {
+  sidebarOpen.value = showClear.value = showDeleteToken.value = showDeleteRequest.value = showIngest.value = false
+  resetUpdates()
 })
 
-// Watch for initial request selection from query params
-// This should only run to sync with query params on initial load or when manually navigating
-watch(requests, (data) => {
-  if (!data || !data.length) return
-
-  // If we already have a selection and it exists in the data, keep it
-  if (selectedRequestId.value && data.some(r => r.id === selectedRequestId.value)) {
+const onEvent = (event: SSEEventPayload) => {
+  if (event.token !== tokenId.value) {
     return
   }
-
-  // Check for request query parameter (for initial load / URL navigation)
-  const requestIdParam = route.query.request
-  if (requestIdParam) {
-    const requestId = String(requestIdParam)
-    if (data.some(r => r.id === requestId)) {
-      selectedRequestId.value = requestId
+  const id = tokenId.value
+  if ('request.received' === event.type) {
+    const request = event.request as RequestSummary | undefined
+    if (!request?.id) {
       return
     }
-  }
-
-  // No selection and no query param - select the first request
-  if (!selectedRequestId.value && data[0]) {
-    selectedRequestId.value = data[0].id
-  }
-}, { immediate: true })
-
-const handleSelectRequest = async (id: string) => {
-  selectedRequestId.value = id
-  closeSidebar()
-  if (incomingIds.value.has(id)) {
-    incomingIds.value.delete(id)
-    incomingIds.value = new Set(incomingIds.value)
-  }
-}
-
-const handleDeleteRequest = async (id: string) => {
-  try {
-    await deleteRequestMutation({ tokenId: tokenId.value, requestId: id })
-
-    // If the deleted request was selected, clear selection or select next
-    if (selectedRequestId.value === id) {
-      const firstRequest = requests.value && requests.value.length > 0 ? requests.value[0] : null
-      selectedRequestId.value = firstRequest ? firstRequest.id : null
+    requestsStore.addRequestToCache(id, request)
+    incomingIds.value.add(request.id)
+    clearTimeout(incomingTimers.get(request.id))
+    incomingTimers.set(request.id, setTimeout(() => {
+      incomingIds.value.delete(request.id)
+      incomingTimers.delete(request.id)
+    }, 3000))
+    notify({
+      title: `Captured ${request.method} request`,
+      color: 'success',
+      actions: [{ label: 'View request', icon: 'i-lucide-arrow-right', onClick: () => {
+        void router.push({ path: `/token/${id}`, query: { request: request.id } })
+      } }],
+    })
+  } else if ('request.deleted' === event.type && 'string' === typeof event.requestId) {
+    requestsStore.removeRequestFromCache(id, event.requestId)
+    if (route.query.request === event.requestId) {
+      void showRequest()
     }
-  } catch (error) {
-    console.error('Failed to delete request:', error)
-    notify({ title: 'Failed to delete request', variant: 'error' })
-  }
-}
-
-const copyPayloadURL = async () => {
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const friendlyId = token.value?.friendlyId ?? shortSlug(tokenId.value)
-  const url = `${origin}/api/payload/${friendlyId}`
-
-  try {
-    await copyText(url)
-    copyState.value = 'copied'
-    setTimeout(() => copyState.value = 'idle', 1200)
-  } catch (error) {
-    console.error('Failed to copy URL:', error)
-  }
-}
-
-const handleClearRequests = async () => {
-  showClearModal.value = false
-
-  try {
-    await deleteAllRequestsMutation(tokenId.value)
-    selectedRequestId.value = null
-    notify({ title: 'Requests cleared', variant: 'success' })
-  } catch (error) {
-    console.error('Failed to clear requests:', error)
-    notify({ title: 'Failed to delete requests', variant: 'error' })
-  }
-}
-
-const handleIngestSuccess = () => {
-  // The store will auto-refetch after the mutation
-}
-const openSidebar = () => isSidebarOpen.value = true
-const closeSidebar = () => isSidebarOpen.value = false
-
-const handleClientEvent = (payload: SSEEventPayload) => {
-  if (payload.token !== tokenId.value) {
-    return
-  }
-
-  switch (payload.type) {
-    case 'request.received': {
-      const incoming = payload.request as RequestSummary | undefined
-      if (!incoming) {
-        break
-      }
-
-      // Determine if we should auto-select before modifying the cache
-      // Auto-select if: no selection OR currently viewing the first (latest) request
-      const isViewingLatest = requests.value && requests.value.length > 0 && selectedRequestIdRef.value === requests.value[0]?.id
-      const shouldAutoselect = selectedRequestIdRef.value === null || isViewingLatest
-
-      // Use store's cache helper to add the request
-      requestsStore.addRequestToCache(tokenId.value, incoming)
-
-      if (shouldAutoselect) {
-        selectedRequestId.value = incoming.id
-      }
-
-      if (!incomingIds.value.has(incoming.id)) {
-        incomingIds.value.add(incoming.id)
-        incomingIds.value = new Set(incomingIds.value)
-
-        setTimeout(() => {
-          incomingIds.value.delete(incoming.id)
-          incomingIds.value = new Set(incomingIds.value)
-        }, 3000)
-      }
-
-      // Calculate request number: requests are in reverse order (newest first)
-      const currentRequests = requests.value || []
-      const index = currentRequests.findIndex(r => r.id === incoming.id)
-      const requestNumber = index !== -1 ? currentRequests.length - index : currentRequests.length
-
-      notify({
-        title: `Request ${incoming.method}`,
-        description: `Captured #${requestNumber}`,
-        color: 'success',
-        actions: [{
-          label: 'View',
-          onClick: async () => {
-            await navigateTo(`/token/${tokenId.value}?request=${incoming.id}`)
-            selectedRequestId.value = incoming.id
-            if (incomingIds.value.has(incoming.id)) {
-              incomingIds.value.delete(incoming.id)
-              incomingIds.value = new Set(incomingIds.value)
-            }
-          },
-        }],
-      })
-      break
+  } else if ('request.cleared' === event.type) {
+    requestsStore.clearRequestsCache(id)
+    if (pinned.value) {
+      void showRequest()
     }
-
-    case 'request.deleted': {
-      if (typeof payload.requestId !== 'string') {
-        break
-      }
-
-      // Use store's cache helper to remove the request
-      requestsStore.removeRequestFromCache(tokenId.value, payload.requestId)
-
-      if (selectedRequestIdRef.value === payload.requestId) {
-        selectedRequestId.value = null
-      }
-
-      if (incomingIds.value.has(payload.requestId)) {
-        incomingIds.value.delete(payload.requestId)
-        incomingIds.value = new Set(incomingIds.value)
-      }
-      break
-    }
-
-    case 'request.cleared': {
-      // Use store's cache helper to clear requests
-      requestsStore.clearRequestsCache(tokenId.value)
-      selectedRequestId.value = null
-
-      if (incomingIds.value.size) {
-        incomingIds.value.clear()
-        incomingIds.value = new Set()
-      }
-      break
-    }
-
-    default:
-      break
   }
 }
 
-let unsubscribe: (() => void) | null = null
-
-onMounted(async () => {
-  isSidebarOpen.value = false
-  unsubscribe = useSSE().onAny(handleClientEvent)
-})
-
+let unsubscribe: (() => void) | undefined
+onMounted(() => { unsubscribe = sse.onAny(onEvent) })
 onUnmounted(() => {
-  isSidebarOpen.value = false
-  if (unsubscribe) {
-    unsubscribe()
-  }
+  unsubscribe?.()
+  resetUpdates()
 })
 </script>
+
+<template>
+  <WorkspacePane v-model:open="sidebarOpen" title="Requests" icon="i-lucide-panel-left"
+    description="Browse the requests captured by this token.">
+    <template #sidebar>
+      <RequestSidebar :requests="requests || []" :selected-id="selected?.id" :incoming-ids="incomingIds"
+        :pending="isPending" :failed="isError" :pinned="pinned"
+        @select="showRequest" @latest="showRequest()" @delete="askToDeleteRequest" @retry="refetch()" />
+    </template>
+
+    <PageHeader section="Capture token" :title="tokenLabel" icon="i-lucide-webhook">
+      <template #actions>
+        <USelectMenu v-if="tokenOptions.length > 1" :model-value="tokenId" :items="tokenOptions" value-key="value"
+          icon="i-lucide-arrow-left-right" aria-label="Switch token" class="min-w-0 max-w-full"
+          @update:model-value="switchToken" />
+        <UButton v-if="token" color="neutral" variant="outline" icon="i-lucide-clipboard-paste"
+          label="Ingest request" @click="showIngest = true" />
+        <ResponseSettingsModal v-if="token" :key="tokenId" :token-id="tokenId" />
+        <UDropdownMenu v-if="token" :items="[
+          [{ label: 'All tokens', icon: 'i-lucide-list', to: '/' }],
+          [
+            { label: 'Clear requests', icon: 'i-lucide-list-x', color: 'error', disabled: !requests?.length, onSelect: () => showClear = true },
+            { label: 'Delete token', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => showDeleteToken = true },
+          ],
+        ]" :content="{ align: 'end' }">
+          <UButton variant="ghost" color="neutral" icon="i-lucide-ellipsis" aria-label="Token actions" />
+        </UDropdownMenu>
+      </template>
+    </PageHeader>
+
+    <UAlert v-if="tokenError" color="error" variant="subtle" title="Could not load this token"
+      description="It may have been deleted or belong to another session."
+      :actions="[
+        { label: 'Retry', icon: 'i-lucide-refresh-cw', onClick: () => retryToken() },
+        { label: 'All tokens', icon: 'i-lucide-list', to: '/' },
+      ]" />
+    <USkeleton v-else-if="!token" class="h-14 w-full" aria-label="Loading token" />
+    <EndpointBar v-else :token-id="tokenId" :endpoint="endpoint" :automation-enabled="llmEnabled" />
+
+    <div v-if="isPending && !tokenError" class="space-y-2" aria-label="Loading request details" aria-busy="true">
+      <USkeleton class="h-20 w-full" />
+      <USkeleton class="h-40 w-full" />
+    </div>
+    <UAlert v-else-if="isError && !tokenError" color="error" variant="subtle" title="Could not load requests"
+      :actions="[{ label: 'Retry', icon: 'i-lucide-refresh-cw', onClick: () => refetch() }]" />
+    <template v-else-if="selected">
+      <RequestDetailsCard :request="selected" :request-number="requestNumber" :token-id="tokenId" />
+      <RawRequestCard :request="selected" :token-id="tokenId" />
+    </template>
+    <UEmpty v-else-if="token" icon="i-lucide-inbox" title="Waiting for a request"
+      description="Send a request to the webhook URL above, or ingest a raw HTTP request.">
+      <template #actions>
+        <UButton variant="outline" color="neutral" label="Ingest request" icon="i-lucide-clipboard-paste"
+          @click="showIngest = true" />
+      </template>
+    </UEmpty>
+
+    <ConfirmModal v-model="showClear" title="Clear request history?" description="This deletes all stored requests for this token."
+      confirm-label="Clear requests" :loading="clearing" @confirm="confirmClear" />
+    <ConfirmModal v-model="showDeleteToken" title="Delete token?" description="This also deletes all requests for the token."
+      confirm-label="Delete token" :loading="deletingToken" @confirm="confirmDeleteToken" />
+    <ConfirmModal v-model="showDeleteRequest" title="Delete request?" description="This permanently removes the captured request."
+      confirm-label="Delete request" :loading="deletingRequest" @confirm="confirmDeleteRequest" />
+    <IngestRequestModal v-model="showIngest" :token-id="tokenId" />
+  </WorkspacePane>
+</template>

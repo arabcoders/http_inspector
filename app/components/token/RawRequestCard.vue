@@ -1,127 +1,61 @@
+<script setup lang="ts">
+import type { RequestSummary } from '~~/shared/types'
+import { useNotificationBridge } from '~/composables/useNotificationBridge'
+import { useRequestsStore } from '~/stores/requests'
+import { copyText } from '~/utils'
+
+const props = defineProps<{ request: RequestSummary; tokenId: string }>()
+const { notify } = useNotificationBridge()
+const open = usePersistedState('raw-request-open', false)
+const panelId = useId()
+const downloadUrl = computed(() => `/api/token/${props.tokenId}/requests/${props.request.id}/raw?download=1`)
+const { data: raw, isPending, isError, refetch } = useRequestsStore().useRequestPreview('raw', {
+  tokenId: computed(() => props.tokenId),
+  requestId: computed(() => props.request.id),
+  enabled: computed(() => open.value && !props.request.isBinary),
+})
+
+const copy = async () => {
+  if (!raw.value || props.request.isBinary || isError.value) {
+    return
+  }
+  const copied = await copyText(raw.value)
+  notify({ title: copied ? 'Raw request copied' : 'Could not copy raw request', color: copied ? 'success' : 'error' })
+}
+</script>
+
 <template>
-  <UCard>
+  <UCard :ui="{ header: 'p-3 sm:p-3', body: 'p-0 sm:p-0' }">
     <template #header>
-      <button type="button" class="w-full flex items-center justify-between text-left" @click="isOpen = !isOpen">
-        <div class="flex flex-col gap-1">
-          <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            {{ summary }}
-          </span>
-          <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
-            View the raw request
-          </span>
-        </div>
-        <div class="flex items-center gap-1">
-          <UTooltip v-if="request && !isBinary" :text="canCopyRaw ? 'Copy raw request' : 'Raw request not loaded'">
-            <UButton :disabled="!canCopyRaw" size="xs" variant="ghost" color="neutral" icon="i-lucide-copy"
-              @click.stop="handleCopyRaw" />
-          </UTooltip>
-
-          <UTooltip v-if="request" text="Download raw request">
-            <ULink :external="true" type="button" variant="ghost" color="neutral" size="xs" role="button"
-              :href="`/api/token/${tokenId}/requests/${request?.id}/raw`" target="_blank">
-              <UIcon name="i-lucide-download" size="xs" class="h-4 w-4" />
-            </ULink>
-          </UTooltip>
-          <UIcon :name="isOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-            class="h-5 w-5 text-gray-500 dark:text-gray-400" />
-        </div>
-      </button>
-    </template>
-
-    <div v-if="isOpen" class="space-y-4 p-4 border-t border-gray-200 dark:border-gray-700">
-      <div
-        class="max-h-[40vh] overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-        <div v-if="!request" class="flex h-32 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-          Select a request to view its raw payload.
-        </div>
-        <div v-else-if="isBinary" 
-                class="flex h-40 flex-col items-center justify-center gap-2 p-4 text-sm text-gray-500 dark:text-gray-400">
-          <UIcon name="i-lucide-alert-circle" class="h-6 w-6" />
-          <span>Preview disabled for binary content.</span>
-        </div>
-        <div v-else-if="rawLoading"
-          class="flex h-32 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-          <UIcon name="i-lucide-loader-2" class="h-5 w-5 animate-spin mr-2" /> Loading raw request.
-        </div>
-        <CodeHighlight v-else-if="rawValue" :code="rawValue" language="http" />
-        <div v-else class="p-4 text-sm text-gray-500 dark:text-gray-400">
-          <UIcon name="i-lucide-alert-circle" class="h-5 w-5 mr-2 inline-block" />
-          Raw request unavailable.
-        </div>
+      <div class="flex items-center gap-1">
+        <h2 class="min-w-0 flex-1">
+          <button type="button" class="flex w-full items-center gap-2 rounded text-start text-sm font-medium text-highlighted focus-visible:outline-2 focus-visible:outline-primary"
+            :aria-expanded="open" :aria-controls="panelId" @click="open = !open">
+            <span class="inspector-section-icon size-8"><UIcon name="i-lucide-code" class="size-4" aria-hidden="true" /></span>
+            Raw HTTP request
+            <UIcon :name="open ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+              class="ms-auto size-4 shrink-0 text-muted" aria-hidden="true" />
+          </button>
+        </h2>
+        <UTooltip v-if="!request.isBinary" text="Copy raw request">
+          <UButton color="neutral" variant="ghost" size="xs" icon="i-lucide-copy" aria-label="Copy raw request"
+            :disabled="!raw || isError" @click="copy" />
+        </UTooltip>
+        <UTooltip text="Download raw request">
+          <UButton :to="downloadUrl" external target="_blank" color="neutral" variant="ghost" size="xs"
+            icon="i-lucide-download" aria-label="Download raw request" />
+        </UTooltip>
       </div>
+    </template>
+    <div v-show="open" :id="panelId" class="min-w-0 overflow-hidden rounded-b-lg">
+      <template v-if="open">
+        <p v-if="request.isBinary" class="p-3 text-sm text-toned">Binary content can be downloaded but not previewed.</p>
+        <p v-else-if="isPending" class="p-3 text-sm text-toned" role="status">Loading raw request…</p>
+        <UAlert v-else-if="isError" class="m-3" color="error" variant="subtle" title="Could not load the raw request"
+          :actions="[{ label: 'Retry', icon: 'i-lucide-refresh-cw', onClick: () => refetch() }]" />
+        <CodeHighlight v-else-if="raw" :code="raw" language="http" />
+        <p v-else class="p-3 text-sm text-toned">No raw request content.</p>
+      </template>
     </div>
   </UCard>
 </template>
-
-<script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { copyText } from '~/utils'
-import CodeHighlight from '~/components/CodeHighlight.vue'
-import { notify } from '~/composables/useNotificationBridge'
-import type { RequestSummary } from '~~/shared/types'
-
-const props = defineProps<{ request: RequestSummary | null, requestNumber: number | null, tokenId: string }>()
-
-const isOpen = usePersistedState('raw-request-open', false)
-const rawValue = ref<string | null>(null)
-const rawLoading = ref(false)
-
-const isBinary = computed(() => Boolean(props.request?.isBinary))
-const canCopyRaw = computed(() => !isBinary.value && Boolean(rawValue.value) && !rawLoading.value)
-
-const summary = computed(() => {
-  if (!props.request) {
-    return 'Select a request to inspect the raw payload.'
-  }
-  return `#${props.requestNumber} · ${props.request.method}`
-})
-
-watch([() => props.request?.id, isOpen], async ([requestId, open]: [string | undefined, boolean]) => {
-  if (!requestId || !open || isBinary.value) {
-    return
-  }
-
-  await loadRaw(requestId)
-}, { immediate: false })
-
-watch(() => props.request?.id, () => rawValue.value = null)
-
-const loadRaw = async (requestId: string) => {
-  rawLoading.value = true
-  try {
-    const res = await fetch(`/api/token/${props.tokenId}/requests/${requestId}/raw`)
-    if (!res.ok) {
-      if (404 === res.status) {
-        notify({ title: 'Request not found', description: 'This request may have been deleted.', color: 'error' })
-      } else if (400 === res.status) {
-        const data = await res.json().catch(() => ({}))
-        notify({
-          title: 'Cannot display content',
-          description: data.message || 'Binary content cannot be displayed as text',
-          color: 'warning',
-        })
-      }
-      notify({ title: 'Failed to load raw request', color: 'error' })
-      rawValue.value = null
-      return
-    }
-    rawValue.value = (await res.text()) || null
-  } catch (error) {
-    console.error('Failed to load raw request:', error)
-    notify({ title: 'Error loading raw request', description: 'Please try again', color: 'error' })
-  } finally {
-    rawLoading.value = false
-  }
-}
-
-const handleCopyRaw = async () => {
-  if (!rawValue.value || isBinary.value) {
-    return
-  }
-
-  await copyText(rawValue.value)
-  notify({ title: 'Raw request copied', color: 'success' })
-}
-
-watch(() => props.request?.id, () => rawValue.value = null)
-</script>

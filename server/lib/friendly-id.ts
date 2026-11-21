@@ -17,7 +17,7 @@ export const isValidFriendlyId = (id: string): boolean => {
     return false
   }
 
-  const [first, second, third, suffix] = parts
+  const [first = '', second = '', third = '', suffix] = parts
 
   const validBase = animals.includes(third) && colors.includes(second) && adjectives.includes(first)
 

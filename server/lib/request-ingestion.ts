@@ -133,13 +133,10 @@ export function parseRawRequest(rawText: string): { method: string, url: string,
         throw new Error('Invalid raw request: missing request line, possibly using LF instead of CRLF')
     }
 
-    const requestLineParts = requestLine.match(/^(\S+)\s+(\S+)\s+HTTP\/[\d.]+$/)
-    if (!requestLineParts) {
+    const [, method, url] = requestLine.match(/^(\S+)\s+(\S+)\s+HTTP\/[\d.]+$/) ?? []
+    if (!method || !url) {
         throw new Error('Invalid raw request: malformed request line.')
     }
-
-    const method = requestLineParts[1]
-    const url = requestLineParts[2]
 
     // Note: URL can be either a path (/api/test) or a full URL (http://example.com/api/test)
     // Both formats are supported and stored as-is
@@ -150,7 +147,7 @@ export function parseRawRequest(rawText: string): { method: string, url: string,
     let foundEmptyLine = false
 
     while (lineIndex < lines.length) {
-        const line = lines[lineIndex]
+        const line = lines[lineIndex] ?? ''
 
         // Empty line marks the end of headers
         if ('' === line) {
@@ -160,11 +157,9 @@ export function parseRawRequest(rawText: string): { method: string, url: string,
         }
 
         // Parse header (e.g., "Content-Type: application/json")
-        const headerMatch = line.match(/^([^:]+):\s*(.*)$/)
-        if (headerMatch) {
-            const headerName = headerMatch[1].trim()
-            const headerValue = headerMatch[2].trim()
-            headers[headerName.toLowerCase()] = headerValue
+        const [, name, value] = line.match(/^([^:]+):\s*(.*)$/) ?? []
+        if (undefined !== name && undefined !== value) {
+            headers[name.trim().toLowerCase()] = value.trim()
         }
 
         lineIndex++

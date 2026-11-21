@@ -16,6 +16,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // Bun's child-process IPC does not implement the fork pool's channel.unref().
+    pool: 'threads',
     include: ['test/**/*.spec.ts']
   }
 })

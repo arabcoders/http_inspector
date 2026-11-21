@@ -1,4 +1,4 @@
-import { ref, watch, type Ref } from 'vue'
+import { onMounted, ref, watch, type Ref } from 'vue'
 
 /**
  * Creates a reactive ref that persists to localStorage
@@ -9,18 +9,19 @@ import { ref, watch, type Ref } from 'vue'
 export function usePersistedState<T>(key: string, defaultValue: T): Ref<T> {
   const state = ref<T>(defaultValue) as Ref<T>
 
-  // Only run on client side
   if (import.meta.client) {
-    try {
-      const stored = localStorage.getItem(key)
-      if (stored !== null) {
-        state.value = JSON.parse(stored) as T
+    // Read after hydration so the initial markup matches the server.
+    onMounted(() => {
+      try {
+        const stored = localStorage.getItem(key)
+        if (stored !== null) {
+          state.value = JSON.parse(stored) as T
+        }
+      } catch (error) {
+        console.warn(`Failed to load persisted state for key "${key}":`, error)
       }
-    } catch (error) {
-      console.warn(`Failed to load persisted state for key "${key}":`, error)
-    }
+    })
 
-    // Watch for changes and persist
     watch(state, (newValue) => {
       try {
         localStorage.setItem(key, JSON.stringify(newValue))

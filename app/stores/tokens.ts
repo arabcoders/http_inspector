@@ -1,5 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import type { Token, TokenListItem } from '~~/shared/types'
+import type { ApiSuccessResponse, Token, TokenListItem } from '~~/shared/types'
+
+type TokenDetails = Omit<Token, 'responseHeaders' | 'createdAt'> & {
+    responseHeaders: Record<string, string> | null
+    createdAt: string
+}
 
 /**
  * Tokens store - handles all token-related API operations
@@ -14,7 +19,8 @@ export const useTokensStore = () => {
     const useTokensList = () => {
         return useQuery({
             queryKey: ['tokens'],
-            queryFn: async () => await $fetch<TokenListItem[]>('/api/token'),
+            queryFn: ({ signal }) => $fetch<TokenListItem[]>('/api/token', { signal }),
+            enabled: import.meta.client,
             staleTime: 1000 * 30,
         })
     }
@@ -27,8 +33,8 @@ export const useTokensStore = () => {
 
         return useQuery({
             queryKey: ['token', id],
-            queryFn: async () => await $fetch<Token>(`/api/token/${id.value}`),
-            enabled: computed(() => !!id.value),
+            queryFn: ({ queryKey: [, token], signal }) => $fetch<TokenDetails>(`/api/token/${token}`, { signal }),
+            enabled: computed(() => import.meta.client && !!id.value),
             staleTime: 1000 * 60, // 1 minute
         })
     }
@@ -52,12 +58,12 @@ export const useTokensStore = () => {
                 tokenId: string
                 updates: Pick<Token, 'responseEnabled' | 'responseStatus' | 'responseHeaders' | 'responseBody'>
             }) => {
-                return await $fetch<Token>(`/api/token/${params.tokenId}`, { method: 'PATCH', body: params.updates })
+                return await $fetch<ApiSuccessResponse>(`/api/token/${params.tokenId}`, { method: 'PATCH', body: params.updates })
             },
-            onSuccess: (data, variables) => {
-                queryClient.invalidateQueries({ queryKey: ['token', variables.tokenId] })
-                queryClient.invalidateQueries({ queryKey: ['tokens'] })
-            },
+            onSuccess: (_, { tokenId }) => Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['token', tokenId] }),
+                queryClient.invalidateQueries({ queryKey: ['tokens'] }),
+            ]),
         })
     }
 

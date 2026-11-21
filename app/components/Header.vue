@@ -1,345 +1,103 @@
-<template>
-    <header
-        class="sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur">
-        <div class="container mx-auto px-4 py-4">
-            <div class="flex items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <ULink to="/" class="flex items-center gap-3 text-lg font-semibold">
-                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-full">
-                            <img src="/favicon.svg" class="h-6 w-6" alt="Logo">
-                        </span>
-                        <span>HTTP Inspector</span>
-                    </ULink>
-                    <ClientOnly>
-                        <SSEStatusIndicator />
-                    </ClientOnly>
-                    <UTooltip v-if="selectedToken" text="Copy Payload URL">
-                        <code
-                            class="hidden select-none cursor-pointer sm:inline-block rounded bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-mono text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                            @click="copyPayloadUrl">
-                        /api/payload/{{ friendlyId || shortSlug(selectedToken) }}
-                    </code>
-                    </UTooltip>
-                </div>
-
-                <div class="flex items-center gap-3">
-                    <ClientOnly>
-                        <div v-if="sessionInfo && sessionRestoreEnabled" class="hidden md:flex items-center gap-2">
-                            <UButton color="neutral" variant="soft" size="sm" icon="i-lucide-user"
-                                @click="copySessionId">
-                                {{ sessionInfo.friendlyId }}
-                            </UButton>
-                        </div>
-                    </ClientOnly>
-
-                    <UButton v-if="sessionRestoreEnabled" color="neutral" variant="ghost" icon="i-lucide-upload"
-                        aria-label="Restore session" @click="showRestoreModal = true" />
-
-                    <NotificationToggle />
-
-                    <ClientOnly>
-                        <UButton :icon="colorMode.value === 'dark' ? 'i-lucide-moon' : 'i-lucide-sun'" color="neutral"
-                            variant="ghost" aria-label="Toggle theme" @click="toggleTheme" />
-                    </ClientOnly>
-
-                    <ClientOnly>
-                        <UButton v-if="authRequired" color="neutral" variant="ghost" icon="i-lucide-log-out"
-                            aria-label="Logout" @click="handleLogout" />
-                    </ClientOnly>
-
-                    <div v-if="isTokenPage" class="hidden md:flex items-center gap-3">
-                        <USelectMenu v-if="tokenOptions.length > 0" v-model="selectedToken" :items="tokenOptions"
-                            value-key="value" label-key="label" placeholder="Select token" class="min-w-[220px]"
-                            size="md" @update:model-value="handleTokenChange" />
-                        <UButton v-if="selectedToken" color="error" variant="solid" icon="i-lucide-trash-2"
-                            :loading="isDeleting" @click="showDeleteModal = true">
-                            Delete
-                        </UButton>
-                    </div>
-
-                    <UButton v-if="hasMobileExtras" class="md:hidden" color="neutral" variant="soft" size="sm"
-                        :icon="showMobileExtras ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-                        :aria-expanded="showMobileExtras" aria-controls="header-mobile-extras"
-                        aria-label="Toggle header actions" @click="toggleMobileExtras" />
-                </div>
-            </div>
-
-            <Transition name="header-slide">
-                <div v-if="showMobileExtras && hasMobileExtras" id="header-mobile-extras"
-                    class="mt-3 grid gap-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-gray-900/90 p-3 shadow-sm md:hidden">
-                    <ClientOnly>
-                        <code v-if="selectedToken"
-                            class="select-none cursor-pointer sm:inline-block rounded bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-mono text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                            @click="copyPayloadUrl">
-                        /api/payload/{{ friendlyId || shortSlug(selectedToken) }}
-                        </code>
-
-                        <UButton v-if="sessionInfo && sessionRestoreEnabled" color="neutral" variant="soft" size="sm"
-                            icon="i-lucide-user" @click="copySessionId">
-                            {{ sessionInfo.friendlyId }}
-                        </UButton>
-                    </ClientOnly>
-
-                    <USelectMenu v-if="isTokenPage && tokenOptions.length > 0" v-model="selectedToken"
-                        :items="tokenOptions" value-key="value" label-key="label" placeholder="Select token" size="md"
-                        class="w-full" @update:model-value="handleTokenChange" />
-                    <UButton v-if="isTokenPage && selectedToken" color="error" variant="solid" icon="i-lucide-trash-2"
-                        :loading="isDeleting" @click="showDeleteModal = true">
-                        Delete Token
-                    </UButton>
-                </div>
-            </Transition>
-        </div>
-
-        <ConfirmModal v-model="showDeleteModal" title="Delete Token" confirm-label="Delete" :loading="isDeleting"
-            description="Delete token and all it's associated requests?" @confirm="confirmDelete" />
-
-        <RestoreSessionModal v-if="sessionRestoreEnabled" v-model="showRestoreModal" />
-    </header>
-</template>
-
 <script setup lang="ts">
-import { computed, watch, onMounted, onUnmounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
-import { useTokensStore } from '~/stores/tokens'
+import type { DropdownMenuItem } from '@nuxt/ui'
+import { useQueryClient } from '@tanstack/vue-query'
+import { useSessionStore } from '~/stores/session'
+import { useNotificationBridge } from '~/composables/useNotificationBridge'
 import { useSSE } from '~/composables/useSSE'
-import type { SSEEventPayload } from '~~/shared/types'
-import { notify } from '~/composables/useNotificationBridge'
-import { copyText, shortSlug } from '~/utils'
+import { copyText } from '~/utils'
 
-const route = useRoute()
 const colorMode = useColorMode()
-const runtimeConfig = useRuntimeConfig()
-
-const tokensStore = useTokensStore()
-const { data: tokens, refetch: refetchTokens } = tokensStore.useTokensList()
-const { mutateAsync: deleteToken } = tokensStore.useDeleteToken()
-
-const sse = useSSE()
-
-const sessionRestoreEnabled = runtimeConfig.public?.sessionRestoreEnabled !== false
-
-const selectedToken = ref<string>('')
-const friendlyId = ref<string>('')
-const isDeleting = ref(false)
-const showDeleteModal = ref(false)
-const showRestoreModal = ref(false)
-const sessionInfo = ref<{ friendlyId: string } | null>(null)
-const authRequired = ref(false)
-const showMobileExtras = ref(false)
-
-// Query for the currently selected token to get friendlyId
-const { data: currentTokenData } = tokensStore.useToken(selectedToken)
-
-// Watch for changes in token data to update friendlyId
-watch(currentTokenData, (tokenData) => {
-    if (tokenData) {
-        friendlyId.value = tokenData.friendlyId || ''
-    } else {
-        friendlyId.value = ''
-    }
-})
-
-const checkAuthStatus = async () => {
-    try {
-        const response = await $fetch<{ required: boolean }>('/api/auth/status')
-        authRequired.value = response.required
-    } catch {
-        authRequired.value = false
-    }
-}
-
-watch(selectedToken, newVal => {
-    if (newVal) {
-        useHead({ title: shortSlug(newVal) })
-    }
-})
-
-const loadSessionInfo = async () => {
-    try {
-        const data = await $fetch<{ friendlyId: string }>('/api/session')
-        if (data?.friendlyId) {
-            sessionInfo.value = { friendlyId: data.friendlyId }
-        }
-    } catch (err) {
-        console.error('Failed to load session info:', err)
-    }
-}
+const queryClient = useQueryClient()
+const { notify } = useNotificationBridge()
+const sse = useSSE(false)
+const restoreEnabled = useRuntimeConfig().public.sessionRestoreEnabled !== false
+const showRestore = ref(false)
+const sessionStore = useSessionStore()
+const { data: auth } = sessionStore.useAuthStatus()
+const { data: session } = sessionStore.useSession()
+const { mutateAsync: logout } = sessionStore.useLogout()
 
 const copySessionId = async () => {
-    if (!sessionInfo.value?.friendlyId) {
-        return
-    }
-
-    try {
-        const success = await copyText(sessionInfo.value.friendlyId)
-
-        if (success) {
-            notify({
-                title: 'Session ID Copied',
-                description: `"${sessionInfo.value.friendlyId}" copied to clipboard`,
-                color: 'success',
-            })
-        }
-    } catch (err) {
-        console.error('Failed to copy:', err)
-    }
+  if (session.value?.friendlyId && await copyText(session.value.friendlyId)) {
+    notify({ title: 'Session ID copied', color: 'success' })
+  }
 }
 
-const copyPayloadUrl = async () => {
-    if (!selectedToken.value && !friendlyId.value) {
-        return
-    }
-
-    const origin = 'undefined' !== typeof window ? window.location.origin : ''
-    const url = `${origin}/api/payload/${friendlyId.value || selectedToken.value}`
-
-    try {
-        if (false === (await copyText(url))) {
-            return
-        }
-
-        notify({ title: 'Payload URL Copied', description: url, color: 'success' })
-    } catch (err) {
-        console.error('Failed to copy:', err)
-    }
+const signOut = async () => {
+  try {
+    await logout()
+    sse.disconnect()
+    queryClient.clear()
+    await navigateTo('/login')
+  } catch (error) {
+    console.error('Sign out failed:', error)
+    notify({ title: 'Could not sign out', color: 'error' })
+  }
 }
 
-const isTokenPage = computed(() => route.path.startsWith('/token/'))
-
-const hasMobileExtras = computed(() => Boolean(sessionInfo.value) || isTokenPage.value)
-
-const tokenOptions = computed(() => {
-    // Sort tokens DESC by createdAt (newest first)
-    const sortedTokens = (tokens.value || []).slice()
-        .sort((a: { createdAt?: string }, b: { createdAt?: string }) => {
-            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
-            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
-            return dateB - dateA
-        })
-
-    return sortedTokens.map((token: { id: string; _count?: { requests: number } }) => {
-        const requestCount = token._count?.requests ?? 0
-        const plural = requestCount === 1 ? 'request' : 'requests'
-        return { label: `${shortSlug(token.id)} · ${requestCount} ${plural}`, value: token.id }
-    })
+const theme = computed(() => {
+  if ('dark' === colorMode.preference) {
+    return { label: 'Dark', icon: 'i-lucide-moon', next: 'system' }
+  }
+  if ('light' === colorMode.preference) {
+    return { label: 'Light', icon: 'i-lucide-sun', next: 'dark' }
+  }
+  return { label: 'System', icon: 'i-lucide-monitor', next: 'light' }
 })
 
-watch(() => route.path, async (path) => {
-    const match = path.match(/\/token\/(.+)/)
-    if (match && match[1]) {
-        selectedToken.value = match[1]
-    } else {
-        selectedToken.value = ''
-        friendlyId.value = ''
-    }
-    showMobileExtras.value = false
-}, { immediate: true })
-
-watch([isTokenPage, hasMobileExtras], ([tokenPage, mobileExtras]) => {
-    if (!tokenPage && !mobileExtras) {
-        showMobileExtras.value = false
-    }
-})
-
-function handleClientEvent(payload: SSEEventPayload) {
-    if (!payload?.type) {
-        return
-    }
-
-    if (!['request.received', 'request.deleted', 'request.cleared'].includes(payload.type)) {
-        return
-    }
-
-    refetchTokens()
-}
-
-let unsubscribe: (() => void) | null = null
-
-onMounted(async () => {
-    await loadSessionInfo()
-    await checkAuthStatus()
-    unsubscribe = sse.onAny(handleClientEvent)
-})
-
-onUnmounted(() => {
-    if (unsubscribe) {
-        unsubscribe()
-        unsubscribe = null
-    }
-})
-
-const toggleTheme = () => {
-    colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
-}
-
-const toggleMobileExtras = () => {
-    showMobileExtras.value = !showMobileExtras.value
-}
-
-const handleLogout = async () => {
-    try {
-        await $fetch<{ ok: boolean }>('/api/auth/logout', { method: 'POST' })
-        notify({
-            title: 'Logged out',
-            description: 'You have been logged out successfully.',
-            color: 'success',
-        })
-
-        sse.emit({ type: 'auth:changed' })
-        await navigateTo('/login')
-    } catch (error) {
-        console.error('Logout failed:', error)
-        notify({
-            title: 'Logout failed',
-            description: 'Could not logout. Please try again.',
-            color: 'error',
-        })
-    }
-}
-
-const handleTokenChange = async (value: string | { value: string; label: string }) => {
-    const newTokenId = 'string' === typeof value ? value : value?.value
-    if (newTokenId) {
-        await navigateTo(`/token/${newTokenId}`)
-    }
-}
-
-const confirmDelete = async () => {
-    if (!selectedToken.value) {
-        return
-    }
-
-    showDeleteModal.value = false
-    isDeleting.value = true
-
-    try {
-        const currentTokens = tokens.value || []
-        const activeIndex = currentTokens.findIndex((t: { id: string }) => t.id === selectedToken.value)
-        const fallback = activeIndex !== -1 ? currentTokens[activeIndex + 1] ?? currentTokens[activeIndex - 1] : undefined
-
-        await deleteToken(selectedToken.value)
-
-        if (fallback) {
-            await navigateTo(`/token/${fallback.id}`)
-        } else {
-            await navigateTo('/')
-        }
-
-        notify({
-            title: 'Token deleted',
-            description: 'The token and all its requests have been removed.',
-            color: 'success',
-        })
-    } catch (error) {
-        console.error('Failed to delete token:', error)
-        notify({
-            title: 'Delete failed',
-            description: 'Could not delete the token. Please try again.',
-            color: 'error',
-        })
-    } finally {
-        isDeleting.value = false
-    }
-}
+const menu = computed<DropdownMenuItem[][]>(() => [
+  [{ label: 'Documentation', icon: 'i-lucide-book-open', to: '/help' }],
+  ...(restoreEnabled ? [[
+    ...(session.value?.friendlyId ? [{
+      label: 'Copy session ID',
+      icon: 'i-lucide-copy',
+      onSelect: copySessionId,
+    }] : []),
+    { label: 'Restore session', icon: 'i-lucide-history', onSelect: () => { showRestore.value = true } },
+  ]] : []),
+  [{
+    label: `Theme: ${theme.value.label}`,
+    icon: theme.value.icon,
+    onSelect: () => { colorMode.preference = theme.value.next },
+  }],
+  ...(auth.value?.required ? [[{
+    label: 'Sign out',
+    icon: 'i-lucide-log-out',
+    color: 'error' as const,
+    onSelect: signOut,
+  }]] : []),
+])
 </script>
+
+<template>
+  <header class="sticky top-[env(safe-area-inset-top)] z-30 shrink-0 border-b border-default bg-default/75 backdrop-blur-md">
+    <a href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:start-3 focus:top-2 focus:z-10 focus:rounded-md focus:bg-default focus:p-2">
+      Skip to main content
+    </a>
+    <div class="flex min-h-15 items-center justify-between gap-2 px-3 sm:px-5">
+      <NuxtLink to="/" class="flex min-w-0 items-center gap-2.5 rounded-md focus-visible:outline-2 focus-visible:outline-primary">
+        <span class="inspector-section-icon size-9">
+          <img src="/favicon.svg" alt="" class="size-6">
+        </span>
+        <span class="min-w-0">
+          <span class="block truncate text-sm font-semibold text-highlighted">HTTP Inspector</span>
+          <span class="hidden text-xs text-toned sm:block">Request capture workspace</span>
+        </span>
+      </NuxtLink>
+
+      <div class="flex shrink-0 items-center gap-0.5 sm:gap-2">
+        <ClientOnly>
+          <SSEStatusIndicator />
+          <UButton v-if="restoreEnabled && session?.friendlyId" class="hidden lg:inline-flex" variant="ghost" color="neutral"
+            icon="i-lucide-copy" :label="session.friendlyId" aria-label="Copy session ID" @click="copySessionId" />
+          <NotificationToggle />
+          <UDropdownMenu :items="menu" :content="{ align: 'end' }">
+            <UButton icon="i-lucide-ellipsis" variant="ghost" color="neutral" aria-label="Workspace menu" />
+          </UDropdownMenu>
+        </ClientOnly>
+      </div>
+    </div>
+    <RestoreSessionModal v-if="restoreEnabled" v-model="showRestore" />
+  </header>
+</template>

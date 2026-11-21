@@ -1,214 +1,153 @@
-<template>
-
-  <div class="flex h-[calc(100vh-180px)] flex-col overflow-hidden">
-    <div class="relative flex flex-1 flex-col overflow-hidden lg:flex-row lg:gap-8">
-      <div v-if="isSidebarOpen" class="fixed inset-0 z-30 backdrop-blur-sm bg-black/40 transition-opacity lg:hidden"
-        @click="closeSidebar" />
-
-      <TokenSidebar :tokens="sortedTokens" :request-counts="requestCounts" :incoming-token-ids="incomingTokenIds"
-        :is-open="isSidebarOpen" :show-mobile-close="true" @create="create" @delete-all="showDeleteAllModal = true"
-        @delete="deleteToken" @copy-url="copyPayloadURL" @close="closeSidebar" />
-
-      <main class="flex-1 overflow-auto">
-        <div class="mb-4 flex items-center justify-between lg:hidden">
-          <UButton icon="i-lucide-menu" variant="soft" color="neutral" @click="openSidebar()">
-            Tokens
-          </UButton>
-          <UButton type="button" variant="soft" color="primary" icon="i-lucide-plus" size="sm" aria-label="Create token"
-            @click="create()">
-            Create
-          </UButton>
-        </div>
-        <article v-if="readmeContent" class="prose dark:prose-invert max-w-7xl" v-html="readmeContent" />
-        <article v-else class="prose dark:prose-invert max-w-7xl">
-          <h1 class="text-2xl font-bold">HTTP Inspector</h1>
-          <p>
-            <UIcon name="i-lucide-loader-2" class="inline h-5 w-5 animate-spin" />
-            Loading documentation...
-          </p>
-        </article>
-      </main>
-    </div>
-
-    <ConfirmModal v-model="showDeleteAllModal" title="Delete All Tokens"
-      description="Are you sure you want to delete all tokens and their stored requests? This action cannot be undone."
-      confirm-label="Delete All" @confirm="confirmDeleteAll" />
-
-    <ConfirmModal v-model="showDeleteTokenModal" title="Delete Token"
-      description="Are you sure you want to delete this token and all its requests? This action cannot be undone."
-      confirm-label="Delete" @confirm="confirmDeleteToken" @cancel="tokenToDelete = null" />
-  </div>
-</template>
-
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed, ref } from 'vue'
-import { marked } from 'marked'
+import type { SSEEventMap } from '~~/shared/types'
+import { useNotificationBridge } from '~/composables/useNotificationBridge'
 import { useSSE } from '~/composables/useSSE'
 import { useTokensStore } from '~/stores/tokens'
 import { copyText, shortSlug } from '~/utils'
-import { notify } from '~/composables/useNotificationBridge'
-import type { TokenListItem, SSEEventPayload } from '~~/shared/types'
 
 const tokensStore = useTokensStore()
-const { data: tokens, refetch: refetchTokens } = tokensStore.useTokensList()
-const { mutateAsync: createTokenMutation } = tokensStore.useCreateToken()
-const { mutateAsync: deleteTokenMutation } = tokensStore.useDeleteToken()
-const { mutateAsync: deleteAllTokensMutation } = tokensStore.useDeleteAllTokens()
+const { data: tokens, isPending, isError, refetch } = tokensStore.useTokensList()
+const { mutateAsync: createToken, isPending: creating } = tokensStore.useCreateToken()
+const { mutateAsync: deleteToken, isPending: deleting } = tokensStore.useDeleteToken()
+const { mutateAsync: deleteAllTokens, isPending: deletingAll } = tokensStore.useDeleteAllTokens()
+const { notify } = useNotificationBridge()
+const router = useRouter()
+const sse = useSSE(false)
 
-const requestCounts = ref<Map<string, number>>(new Map())
-const incomingTokenIds = ref<Set<string>>(new Set())
-const showDeleteAllModal = ref(false)
-const showDeleteTokenModal = ref(false)
-const tokenToDelete = ref<string | null>(null)
-const readmeContent = ref('')
-const isSidebarOpen = ref(false)
+const sidebarOpen = ref(false)
+const showDelete = ref(false)
+const showDeleteAll = ref(false)
+const tokenToDelete = ref('')
+const incomingIds = ref(new Set<string>())
+const incomingTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
-const openSidebar = () => isSidebarOpen.value = true
-const closeSidebar = () => isSidebarOpen.value = false
+const sortedTokens = computed(() => [...(tokens.value || [])].sort(
+  (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
+))
 
-const sortedTokens = computed(() => (tokens.value || []).slice().sort((a: TokenListItem, b: TokenListItem) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()))
-const create = async () => await createTokenMutation()
-
-const confirmDeleteAll = async () => {
-  showDeleteAllModal.value = false
-  await deleteAllTokensMutation()
-  notify({
-    title: 'All tokens deleted',
-    description: 'All tokens and their requests have been removed',
-    color: 'success',
-  })
-}
-
-const confirmDeleteToken = async () => {
-  if (!tokenToDelete.value) {
-    return
+const create = async () => {
+  try {
+    const token = await createToken()
+    sidebarOpen.value = false
+    await router.push(`/token/${token.id}`)
+    notify({ title: 'Token created', color: 'success' })
+  } catch (error) {
+    console.error('Could not create token:', error)
+    notify({ title: 'Could not create a token', color: 'error' })
   }
-
-  const id = tokenToDelete.value
-  showDeleteTokenModal.value = false
-  tokenToDelete.value = null
-
-  await deleteTokenMutation(id)
 }
 
-const copyPayloadURL = async (id: string) => {
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const token = tokens.value?.find(t => t.id === id)
-  const friendlyId = token?.friendlyId ?? shortSlug(id)
-  const url = `${origin}/api/payload/${friendlyId}`
-  await copyText(url)
+const copyWebhook = async (id: string) => {
+  const endpoint = tokens.value?.find(token => token.id === id)?.friendlyId || id
+  const success = await copyText(`${window.location.origin}/api/payload/${endpoint}`)
+  notify({ title: success ? 'Webhook URL copied' : 'Could not copy webhook URL', color: success ? 'success' : 'error' })
 }
 
-const deleteToken = (id: string) => {
+const askToDelete = (id: string) => {
+  sidebarOpen.value = false
   tokenToDelete.value = id
-  showDeleteTokenModal.value = true
+  showDelete.value = true
 }
 
-const handleClientEvent = (payload: SSEEventPayload): void => {
+const askToDeleteAll = () => {
+  sidebarOpen.value = false
+  showDeleteAll.value = true
+}
 
-  const tokenId = payload.token as string
-  switch (payload.type) {
-    case 'token.created': {
-      refetchTokens()
-      const token = (payload as SSEEventMap['token.created']).token
-      notify({
-        title: 'Token created',
-        description: `Click to view token ${token.friendlyId}`,
-        color: 'success',
-        actions: [{
-          label: 'View Token',
-          onClick: async () => { await navigateTo(`/token/${token.id}`) },
-        }],
-      })
-
-      break
+const confirmDelete = async (all: boolean) => {
+  try {
+    if (all) {
+      await deleteAllTokens()
+      showDeleteAll.value = false
+    } else {
+      await deleteToken(tokenToDelete.value)
+      showDelete.value = false
     }
-
-    case 'token.deleted': {
-      refetchTokens()
-      if (tokenId) {
-        requestCounts.value.delete(tokenId)
-      }
-      break
-    }
-
-    case 'request.received': {
-      if (!tokenId) {
-        return
-      }
-
-      const token = (tokens.value as TokenListItem[] | undefined)?.find(t => t.id === tokenId)
-      const currentCount = requestCounts.value.get(tokenId) ?? (token?._count?.requests ?? 0)
-      requestCounts.value.set(tokenId, currentCount + 1)
-
-      // Add to incoming tokens set
-      if (!incomingTokenIds.value.has(tokenId)) {
-        incomingTokenIds.value.add(tokenId)
-        incomingTokenIds.value = new Set(incomingTokenIds.value)
-
-        // Remove from incoming after 3 seconds
-        setTimeout(() => {
-          incomingTokenIds.value.delete(tokenId)
-          incomingTokenIds.value = new Set(incomingTokenIds.value)
-        }, 3000)
-      }
-
-      const request = payload.request as { id?: number; method?: string } | undefined
-      notify({
-        title: `${request?.method || 'Request'} → ${shortSlug(tokenId)}`,
-        description: `Click to view`,
-        color: 'success',
-        actions: [{
-          label: 'View Request',
-          onClick: async () => { await navigateTo(`/token/${tokenId}`) },
-        }],
-      })
-      break
-    }
-
-    case 'request.deleted': {
-      if (!tokenId) {
-        return
-      }
-
-      const currentCount = requestCounts.value.get(tokenId) ?? 0
-      requestCounts.value.set(tokenId, Math.max(0, currentCount - 1))
-      break
-    }
-
-    case 'request.cleared': {
-      if (!tokenId) {
-        return
-      }
-      requestCounts.value.set(tokenId, 0)
-      break
-    }
-
-    default:
-      break
+    notify({ title: all ? 'All tokens deleted' : 'Token deleted', color: 'success' })
+  } catch (error) {
+    console.error('Could not delete tokens:', error)
+    notify({ title: 'Could not delete tokens', color: 'error' })
   }
 }
 
-let unsubscribe: (() => void) | null = null
+const onRequest = ({ token, request }: SSEEventMap['request.received']) => {
+  const requestId = typeof request.id === 'string' ? request.id : undefined
+  incomingIds.value.add(token)
+  clearTimeout(incomingTimers.get(token))
+  incomingTimers.set(token, setTimeout(() => {
+    incomingIds.value.delete(token)
+    incomingTimers.delete(token)
+  }, 3000))
 
-onMounted(async () => {
-  marked.setOptions({ gfm: true, breaks: false })
-
-  readmeContent.value = await marked.parse(await $fetch<string>('/api/readme'))
-
-  const tokenList = tokens.value as TokenListItem[] | undefined
-  tokenList?.forEach((token: TokenListItem) => {
-    if (token._count?.requests !== undefined) {
-      requestCounts.value.set(token.id, token._count.requests)
-    }
+  notify({
+    title: `Captured ${request.method} request`,
+    description: tokens.value?.find(item => item.id === token)?.friendlyId || shortSlug(token),
+    color: 'success',
+    actions: [{ label: 'View request', icon: 'i-lucide-arrow-right', onClick: () => {
+      void router.push({ path: `/token/${token}`, query: { request: requestId } })
+    } }],
   })
+}
 
-  unsubscribe = useSSE().onAny(handleClientEvent)
-})
-
+let unsubscribe: (() => void) | undefined
+onMounted(() => { unsubscribe = sse.on('request.received', onRequest) })
 onUnmounted(() => {
-  if (unsubscribe) {
-    unsubscribe()
+  unsubscribe?.()
+  for (const timer of incomingTimers.values()) {
+    clearTimeout(timer)
   }
 })
 </script>
+
+<template>
+  <WorkspacePane v-model:open="sidebarOpen" title="Tokens" icon="i-lucide-panel-left"
+    description="Create a token or open an existing capture.">
+    <template #sidebar>
+      <TokenSidebar :tokens="sortedTokens" :pending="isPending" :failed="isError" :creating="creating"
+        :incoming-ids="incomingIds" @create="create" @select="sidebarOpen = false" @retry="refetch()"
+        @copy-url="copyWebhook" @delete="askToDelete" @delete-all="askToDeleteAll" />
+    </template>
+
+    <PageHeader section="Workspace" title="Capture requests" icon="i-lucide-webhook"
+      description="Get a webhook URL, send it an HTTP request, and inspect what arrived.">
+      <template #actions>
+        <UButton icon="i-lucide-plus" label="New token" :loading="creating" @click="create" />
+        <UButton to="/help" icon="i-lucide-book-open" label="Documentation" color="neutral" variant="outline" />
+      </template>
+    </PageHeader>
+
+    <UCard>
+      <template #header>
+        <h2 class="font-semibold text-highlighted">Get started</h2>
+      </template>
+      <ol class="grid gap-4 md:grid-cols-3">
+        <li class="flex gap-3">
+          <span class="inspector-section-icon"><UIcon name="i-lucide-webhook" class="size-5" aria-hidden="true" /></span>
+          <div>
+            <h3 class="text-sm font-semibold text-highlighted">1. Create a token</h3>
+            <p class="mt-1 text-sm text-toned">Each token has its own webhook URL and request history.</p>
+          </div>
+        </li>
+        <li class="flex gap-3">
+          <span class="inspector-section-icon"><UIcon name="i-lucide-send" class="size-5" aria-hidden="true" /></span>
+          <div>
+            <h3 class="text-sm font-semibold text-highlighted">2. Send a request</h3>
+            <p class="mt-1 text-sm text-toned">Copy the URL into your app or HTTP client. Any HTTP method works.</p>
+          </div>
+        </li>
+        <li class="flex gap-3">
+          <span class="inspector-section-icon"><UIcon name="i-lucide-scan-search" class="size-5" aria-hidden="true" /></span>
+          <div>
+            <h3 class="text-sm font-semibold text-highlighted">3. Inspect the capture</h3>
+            <p class="mt-1 text-sm text-toned">Open a request to see its headers, query parameters, and body.</p>
+          </div>
+        </li>
+      </ol>
+    </UCard>
+    <ConfirmModal v-model="showDelete" title="Delete token?" description="This also deletes all requests for the token."
+      confirm-label="Delete token" :loading="deleting" @confirm="confirmDelete(false)" />
+    <ConfirmModal v-model="showDeleteAll" title="Delete all tokens?"
+      description="This deletes every token in this session and all of their stored requests."
+      confirm-label="Delete all tokens" :loading="deletingAll" @confirm="confirmDelete(true)" />
+  </WorkspacePane>
+</template>

@@ -122,7 +122,7 @@ export const useDatabase = (dbFile?: string, filesPath?: string) => {
      */
     getByFriendlyId: async (friendlyId: string): Promise<Token | null> => {
       const result = await db.select().from(tokensSchema).where(eq(tokensSchema.friendlyId, friendlyId)).limit(1)
-      return !result.length ? null : result[0]
+      return result[0] ?? null
     },
 
     /**
@@ -140,11 +140,7 @@ export const useDatabase = (dbFile?: string, filesPath?: string) => {
           eq(tokensSchema.id, tokenId)
         )).limit(1)
 
-      if (!result.length) {
-        return null
-      }
-
-      return result[0]
+      return result[0] ?? null
     },
 
     /**
@@ -261,7 +257,7 @@ export const useDatabase = (dbFile?: string, filesPath?: string) => {
         .where(eq(tokensSchema.id, tokenId))
         .limit(1)
 
-      return result.length ? result[0].sessionId : null
+      return result[0]?.sessionId ?? null
     },
   }
 
@@ -318,8 +314,11 @@ export const useDatabase = (dbFile?: string, filesPath?: string) => {
       }
       const request: typeof requestsSchema.$inferInsert = dat
 
-      const result = await db.insert(requestsSchema).values(request).returning()
-      return result[0]
+      const [created] = await db.insert(requestsSchema).values(request).returning()
+      if (!created) {
+        throw new Error('Request insert did not return a record')
+      }
+      return created
     },
 
     /**
@@ -338,7 +337,7 @@ export const useDatabase = (dbFile?: string, filesPath?: string) => {
         eq(requestsSchema.sessionId, sessionId)
       )).limit(1)
 
-      return !result.length ? null : result[0]
+      return result[0] ?? null
     },
 
     /**
@@ -366,17 +365,17 @@ export const useDatabase = (dbFile?: string, filesPath?: string) => {
      * @returns The body as Uint8Array if found, null otherwise.
      */
     getBody: async (sessionId: string, tokenId: string, requestId: string): Promise<Uint8Array | null> => {
-      const request = await db.select().from(requestsSchema).where(and(
+      const [request] = await db.select().from(requestsSchema).where(and(
         eq(requestsSchema.id, requestId),
         eq(requestsSchema.tokenId, tokenId),
         eq(requestsSchema.sessionId, sessionId))
       ).limit(1)
 
-      if (!request.length || !request[0].bodyPath) {
+      if (!request?.bodyPath) {
         return null
       }
 
-      const buffer = await storage.read(request[0].bodyPath)
+      const buffer = await storage.read(request.bodyPath)
       return buffer ? new Uint8Array(buffer) : null
     },
 
@@ -390,18 +389,18 @@ export const useDatabase = (dbFile?: string, filesPath?: string) => {
      * @returns Readable stream and file path if found, null otherwise.
      */
     streamBody: async (sessionId: string, tokenId: string, requestId: string) => {
-      const request = await db.select().from(requestsSchema).where(and(
+      const [request] = await db.select().from(requestsSchema).where(and(
         eq(requestsSchema.id, requestId),
         eq(requestsSchema.tokenId, tokenId),
         eq(requestsSchema.sessionId, sessionId)
       )).limit(1)
 
-      if (!request.length || !request[0].bodyPath) {
+      if (!request?.bodyPath) {
         return null
       }
 
-      const stream = storage.stream(request[0].bodyPath)
-      return !stream ? null : { stream, filePath: request[0].bodyPath }
+      const stream = storage.stream(request.bodyPath)
+      return !stream ? null : { stream, filePath: request.bodyPath }
     },
 
     /**

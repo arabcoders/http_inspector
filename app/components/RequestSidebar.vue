@@ -1,152 +1,68 @@
-<template>
-  <aside
-    class="flex h-full w-full max-w-[20rem] flex-col border-r border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-950/95 lg:bg-transparent lg:dark:bg-transparent lg:w-80">
-    <div class="flex items-center justify-between gap-3 border-b border-gray-200 dark:border-gray-800 px-4 py-3">
-      <div class="flex items-center gap-2">
-        <UBadge color="neutral" variant="subtle" size="md" class="uppercase tracking-wide">
-          REQs
-        </UBadge>
-        <UBadge color="primary" variant="soft" size="md">
-          {{ requests.length }}
-        </UBadge>
-      </div>
-
-      <div class="flex items-center gap-2">
-        <UButton v-if="showMobileClose" class="lg:hidden" type="button" color="neutral" variant="ghost"
-          icon="i-lucide-x" aria-label="Close requests sidebar" @click="$emit('close')" />
-
-        <UTooltip text="Copy Payload URL">
-          <UButton type="button" color="neutral" variant="ghost" icon="i-lucide-copy" size="sm"
-            aria-label="Copy Payload URL" @click="$emit('copy-url')" />
-        </UTooltip>
-
-        <UTooltip text="Manual request Ingestion">
-          <UButton type="button" color="primary" variant="ghost" icon="i-lucide-upload" size="sm"
-            aria-label="Ingest request" @click="$emit('ingest')" />
-        </UTooltip>
-
-        <UTooltip text="Clear all requests">
-          <UButton type="button" color="error" variant="ghost" icon="i-lucide-trash-2" size="sm"
-            aria-label="Clear all requests" :disabled="!requests.length" @click="$emit('clear')" />
-        </UTooltip>
-      </div>
-    </div>
-
-    <div class="flex-1 overflow-auto">
-      <div class="space-y-2 p-3">
-        <template v-if="!requests || requests.length === 0">
-          <div
-            class="flex flex-col items-center justify-center gap-3 rounded border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/30 p-6 text-center text-sm text-gray-500 dark:text-gray-400">
-            <UIcon name="i-lucide-inbox" class="h-8 w-8 text-gray-400 dark:text-gray-600 animate-pulse" />
-            <span>Waiting for requests...</span>
-          </div>
-        </template>
-
-        <template v-else>
-          <div v-for="request in requests" :key="request.id"
-            class="group relative rounded-xl border border-gray-200 dark:border-gray-700 transition-all duration-150"
-            :class="[selectedRequestId === request.id ? 'bg-primary-50/80 dark:bg-primary-900/30 border-primary-300 dark:border-primary-700' : 'hover:bg-gray-50 dark:hover:bg-gray-800',
-            incomingIds && incomingIds.has(request.id) ? 'ring-2 ring-success animate-pulse' : '']">
-            <UButton type="button" color="neutral" variant="ghost" size="md" class="w-full justify-start text-left"
-              @click="$emit('select', request.id)">
-              <div class="flex w-full flex-col gap-2">
-                <div class="flex items-center gap-2">
-                  <UBadge v-bind="getMethodBadgeProps(request.method)" class="uppercase tracking-wide" size="xs">
-                    {{ request.method }}
-                  </UBadge>
-
-                  <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ getRequestNumber(request.id) }}</span>
-
-                  <UBadge v-if="incomingIds && incomingIds.has(request.id)" color="success" variant="solid" size="xs"
-                    class="font-semibold uppercase">
-                    New
-                  </UBadge>
-
-                  <div class="ml-auto inline-flex items-center gap-1">
-                    <UBadge v-if="request.isBinary" color="primary" variant="outline" size="xs">
-                      <UIcon name="i-heroicons-document-arrow-down" class="h-3 w-3" />
-                      BINARY
-                    </UBadge>
-                    <UTooltip text="Delete request">
-                      <UButton type="button" color="error" variant="ghost" icon="i-lucide-trash-2" size="xs"
-                        aria-label="Delete request" @click.stop="$emit('delete', request.id)" />
-                    </UTooltip>
-                  </div>
-                </div>
-
-                <div class="flex items-center text-xs text-gray-600 dark:text-gray-400">
-                  <UTooltip text="Click to copy client IP">
-                    <span v-if="request.clientIp || request.remoteIp" class="truncate hover:cursor-pointer"
-                      @click="handleCopyIp(request)">
-                      {{ request.remoteIp || request.clientIp }}
-                    </span>
-                  </UTooltip>
-                  <span class="ml-auto">
-                    {{ formatTime(request.createdAt) }}
-                  </span>
-                </div>
-              </div>
-            </UButton>
-          </div>
-        </template>
-      </div>
-    </div>
-  </aside>
-</template>
-
 <script setup lang="ts">
-import type { RequestSummary, MethodBadgeProps } from '~~/shared/types'
+import type { RequestSummary } from '~~/shared/types'
+import { getMethodBadgeProps } from '~/utils/request-presentation'
 
+defineProps<{
+  requests: RequestSummary[]
+  selectedId?: string
+  incomingIds: Set<string>
+  pending: boolean
+  failed: boolean
+  pinned: boolean
+}>()
 defineEmits<{
-  (e: 'select' | 'delete', id: string): void
-  (e: 'copy-url' | 'clear' | 'close' | 'ingest'): void
+  select: [id: string]
+  delete: [id: string]
+  retry: []
+  latest: []
 }>()
 
-const props = defineProps<{
-  requests: Array<RequestSummary>
-  selectedRequestId: string | null
-  copyState?: 'idle' | 'copied'
-  incomingIds?: Set<string>
-  showMobileClose?: boolean
-}>()
-
-const getRequestNumber = (requestId: string): number => {
-  const index = props.requests.findIndex((r: RequestSummary) => r.id === requestId)
-  return index !== -1 ? props.requests.length - index : 0
-}
-
-const getMethodBadgeProps = (method: string): MethodBadgeProps => {
-  const normalized = method.toUpperCase()
-  const map: Record<string, MethodBadgeProps> = {
-    GET: { color: 'info', variant: 'soft' },
-    POST: { color: 'success', variant: 'soft' },
-    PUT: { color: 'warning', variant: 'soft' },
-    PATCH: { color: 'primary', variant: 'soft' },
-    DELETE: { color: 'error', variant: 'soft' },
-  }
-
-  return map[normalized] ?? { color: 'neutral', variant: 'outline' }
-}
-
-const formatTime = (value: unknown): string => {
-  try {
-    if (!value) return ''
-    const date = new Date(value as string)
-    return date.toLocaleTimeString([], {
-      month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit'
-    })
-  } catch {
-    return ''
-  }
-}
-
-const handleCopyIp = async (request: RequestSummary) => {
-  const clientIp = request.remoteIp || request.clientIp || undefined
-  if (!clientIp) {
-    return
-  }
-
-  await copyText(clientIp)
-}
+const formatTime = (timestamp: string) => new Date(timestamp).toLocaleString([], {
+  month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit',
+})
 </script>
+
+<template>
+  <div class="flex min-h-0 flex-1 flex-col">
+    <div class="flex items-center justify-between gap-2 border-b border-default p-3">
+      <div class="flex items-center gap-2">
+        <span class="hidden text-sm font-semibold text-highlighted lg:inline">Requests</span>
+        <UBadge v-if="!pending && !failed" color="neutral" variant="subtle">{{ requests.length }}</UBadge>
+      </div>
+      <UButton v-if="pinned" color="neutral" variant="ghost" icon="i-lucide-radio" label="Follow latest"
+        @click="$emit('latest')" />
+      <UBadge v-else color="success" variant="subtle" icon="i-lucide-radio">Following latest</UBadge>
+    </div>
+    <div class="min-h-0 flex-1 overflow-y-auto p-2.5">
+      <div v-if="pending" class="space-y-2" aria-label="Loading requests" aria-busy="true">
+        <USkeleton v-for="index in 3" :key="index" class="h-14 w-full" />
+      </div>
+      <UAlert v-else-if="failed" title="Could not load requests" color="error" variant="subtle"
+        :actions="[{ label: 'Retry', icon: 'i-lucide-refresh-cw', onClick: () => $emit('retry') }]" />
+      <UEmpty v-else-if="!requests.length" icon="i-lucide-inbox" title="No requests yet"
+        description="Requests appear here as they arrive." :ui="{ root: 'p-4' }" />
+      <ul v-else class="space-y-0.5">
+        <li v-for="(request, index) in requests" :key="request.id" class="inspector-row"
+          :data-selected="selectedId === request.id">
+          <button type="button" class="min-w-0 flex-1 rounded text-start focus-visible:outline-2 focus-visible:outline-primary"
+            :aria-current="selectedId === request.id ? 'true' : undefined" @click="$emit('select', request.id)">
+            <span class="flex flex-wrap items-center gap-1.5">
+              <UBadge v-bind="getMethodBadgeProps(request.method)" size="xs">{{ request.method }}</UBadge>
+              <span class="text-xs text-toned">#{{ requests.length - index }}</span>
+              <UBadge v-if="incomingIds.has(request.id)" color="success" variant="subtle" size="xs">New</UBadge>
+              <UBadge v-if="request.isBinary" color="neutral" variant="subtle" size="xs">Binary</UBadge>
+            </span>
+            <span class="mt-1 block truncate font-mono text-xs text-highlighted" :title="request.url">{{ request.url }}</span>
+            <ClientOnly>
+              <time class="mt-1 block text-xs text-toned" :datetime="request.createdAt">{{ formatTime(request.createdAt) }}</time>
+            </ClientOnly>
+          </button>
+          <UTooltip text="Delete request">
+            <UButton icon="i-lucide-trash-2" size="xs" color="neutral" variant="ghost"
+              :aria-label="`Delete request ${requests.length - index}`" @click="$emit('delete', request.id)" />
+          </UTooltip>
+        </li>
+      </ul>
+    </div>
+  </div>
+</template>

@@ -24,20 +24,20 @@ export const useKVStore = (dbFile?: string) => {
      */
     const get = async <T = unknown>(key: string): Promise<T | null> => {
         key = normalizeKey(key)
-        const result = await db
+        const [result] = await db
             .select({ value: keyValueStore.value })
             .from(keyValueStore)
             .where(eq(keyValueStore.key, key)).limit(1)
 
-        if (!result.length) {
+        if (!result) {
             return null
         }
 
         try {
-            return JSON.parse(result[0].value) as T
+            return JSON.parse(result.value) as T
         } catch {
             // If parsing fails, return as string (for backward compatibility)
-            return result[0].value as T
+            return result.value as T
         }
     };
 
@@ -56,7 +56,7 @@ export const useKVStore = (dbFile?: string) => {
             .where(eq(keyValueStore.key, key))
             .limit(1)
 
-        return result.length ? result[0].value : null
+        return result[0]?.value ?? null
     }
 
     /**

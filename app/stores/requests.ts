@@ -16,9 +16,26 @@ export const useRequestsStore = () => {
 
         return useQuery({
             queryKey: ['requests', id],
-            queryFn: async () => await $fetch<RequestSummary[]>(`/api/token/${id.value}/requests`),
-            enabled: computed(() => !!id.value),
+            queryFn: ({ queryKey: [, token], signal }) => $fetch<RequestSummary[]>(`/api/token/${token}/requests`, { signal }),
+            enabled: computed(() => import.meta.client && !!id.value),
             staleTime: 1000 * 10,
+        })
+    }
+
+    type PreviewOptions = { tokenId: Ref<string>; requestId: Ref<string>; enabled: Ref<boolean> }
+
+    /** Fetch the text or structured body preview only when its panel is open. */
+    const useRequestPreview = <T extends 'raw' | 'body'>(kind: T, { tokenId, requestId, enabled }: PreviewOptions) => {
+        type BodyPreview = { text?: string; contentType?: string | null; isBinary: boolean }
+        return useQuery({
+            queryKey: ['request-preview', tokenId, requestId, kind] as const,
+            queryFn: ({ queryKey: [, token, request, preview], signal }) =>
+                $fetch<T extends 'raw' ? string : BodyPreview>(`/api/token/${token}/requests/${request}/${preview}`, {
+                    signal,
+                    responseType: 'raw' === preview ? 'text' : 'json',
+                }),
+            enabled: computed(() => import.meta.client && enabled.value && !!tokenId.value && !!requestId.value),
+            staleTime: Infinity,
         })
     }
 
@@ -78,7 +95,7 @@ export const useRequestsStore = () => {
      */
     const addRequestToCache = (tokenId: string, request: RequestSummary) => queryClient.setQueryData<RequestSummary[]>(
         ['requests', tokenId],
-        old => old ? [request, ...old] : [request]
+        old => [request, ...(old ?? []).filter(item => item.id !== request.id)]
     )
 
     /**
@@ -100,6 +117,7 @@ export const useRequestsStore = () => {
         // Query hooks
         useRequestsList,
         useRequest,
+        useRequestPreview,
         // Mutation hooks
         useDeleteRequest,
         useDeleteAllRequests,

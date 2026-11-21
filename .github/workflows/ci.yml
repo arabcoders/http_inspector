@@ -11,7 +11,7 @@ on:
             - ".github/ISSUE_TEMPLATE/**"
 
 env:
-    BUN_VERSION: 1.4.2
+    BUN_VERSION: 1.4.4
 
 jobs:
     build-and-test:
@@ -34,7 +34,7 @@ jobs:
               run: bun run test
             
             - name: Run type-check
-              run: bun run tsc
+              run: bun run typecheck
 
             - name: Build
               run: bun run build

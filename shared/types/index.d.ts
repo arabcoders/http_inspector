@@ -218,7 +218,7 @@ export interface NotificationPayload {
     color?: ToastColor
     icon?: string
     timeout?: number
-    actions?: { label: string; onClick: () => void }[]
+    actions?: { label: string; icon?: string; onClick: () => void }[]
 }
 
 // ============================================================================

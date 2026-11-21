@@ -1,9 +1,16 @@
 <template>
-    <UTooltip :text="tooltipText" :delay-duration="0">
-        <UButton :icon="statusIcon" :color="statusColor" variant="ghost" size="xs" :aria-label="ariaLabel"
-            :disabled="status === 'connected'" :class="{ 'cursor-pointer': status === 'disconnected' }"
-            @click="handleReconnect" />
-    </UTooltip>
+    <div class="flex items-center gap-1">
+        <span role="status" class="sr-only">{{ statusLabel }}</span>
+        <UBadge v-if="'disconnected' !== status" :icon="statusIcon" :color="statusColor" variant="subtle" aria-hidden="true">
+            <span class="hidden sm:inline">{{ statusLabel }}</span>
+        </UBadge>
+        <UTooltip v-else text="Reconnect to live updates">
+            <UButton :icon="statusIcon" color="error" variant="ghost" aria-label="Reconnect to live updates"
+                @click="reconnect">
+                <span class="hidden sm:inline">Offline</span>
+            </UButton>
+        </UTooltip>
+    </div>
 </template>
 
 <script setup lang="ts">
@@ -38,35 +45,16 @@ const statusColor = computed(() => {
     }
 })
 
-const tooltipText = computed(() => {
+const statusLabel = computed(() => {
     switch (status.value) {
         case 'connected':
-            return 'Connected to live updates'
+            return 'Live'
         case 'connecting':
-            return 'Connecting to live updates...'
+            return 'Connecting'
         case 'disconnected':
-            return 'Disconnected - Click to reconnect'
-        default:
-            return 'Unknown connection status'
-    }
-})
-
-const ariaLabel = computed(() => {
-    switch (status.value) {
-        case 'connected':
-            return 'Live updates connected'
-        case 'connecting':
-            return 'Connecting to live updates'
-        case 'disconnected':
-            return 'Reconnect to live updates'
+            return 'Live updates offline'
         default:
             return 'Connection status'
     }
 })
-
-const handleReconnect = () => {
-    if ('disconnected' === status.value) {
-        reconnect()
-    }
-}
 </script>

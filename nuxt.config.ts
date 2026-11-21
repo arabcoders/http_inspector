@@ -1,5 +1,3 @@
-import tailwindcss from "@tailwindcss/vite";
-
 const sessionRestoreEnabled = process.env.SESSION_RESTORE_ENABLED !== 'false'
 const llmEndpointEnabled = process.env.ENABLE_LLM_ENDPOINT === 'true'
 
@@ -9,10 +7,7 @@ export default defineNuxtConfig({
     host: '0.0.0.0'
   },
   devtools: { enabled: true },
-  modules: ['@nuxt/eslint', '@nuxt/test-utils', '@nuxt/ui'],
-  vite: {
-    plugins: [tailwindcss()]
-  },
+  modules: ['@nuxt/eslint', '@nuxt/ui'],
   app: {
     head: {
       link: [
@@ -23,17 +18,12 @@ export default defineNuxtConfig({
         { rel: 'manifest', href: '/site.webmanifest' },
       ],
       meta: [
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
         { name: 'apple-mobile-web-app-title', content: 'HTTP Inspector' },
       ],
     },
   },
   css: ['~/assets/css/main.css'],
-  postcss: {
-    plugins: {
-      "@tailwindcss/postcss": {},
-      autoprefixer: {},
-    },
-  },
   runtimeConfig: {
     sessionRestoreEnabled,
     llmEndpointEnabled,

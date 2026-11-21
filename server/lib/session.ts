@@ -55,20 +55,20 @@ export const getOrCreateSession = async (event: H3Event): Promise<string> => {
     }
 
     const db = getDb()
-    const result = await db
+    const [result] = await db
       .select()
       .from(sessions)
       .where(eq(sessions.id, existingSessionId))
       .limit(1)
 
-    if (result.length) {
+    if (result) {
       // Update last accessed time
       await db
         .update(sessions)
         .set({ lastAccessedAt: new Date() })
         .where(eq(sessions.id, existingSessionId))
 
-      return result[0].id
+      return result.id
     }
   }
 
@@ -119,17 +119,17 @@ export const setSession = async (event: H3Event, friendlyId: string): Promise<bo
     return false
   }
 
-  const result = await db
+  const [result] = await db
     .select({ id: sessions.id })
     .from(sessions)
     .where(eq(sessions.friendlyId, friendlyId))
     .limit(1)
 
-  if (!result.length) {
+  if (!result) {
     return false
   }
 
-  const sessionId = result[0].id
+  const sessionId = result.id
 
   await db.update(sessions).set({ lastAccessedAt: new Date() }).where(eq(sessions.id, sessionId))
 
@@ -148,7 +148,7 @@ export const getSession = async (sessionId: string): Promise<Session | null> => 
 
   const result = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1)
 
-  return result.length ? result[0] : null
+  return result[0] ?? null
 }
 
 export const deleteSession = async (event: H3Event): Promise<void> => {
@@ -205,4 +205,3 @@ export const ensureLLMSession = async (): Promise<void> => {
     lastAccessedAt: now,
   })
 }
-
